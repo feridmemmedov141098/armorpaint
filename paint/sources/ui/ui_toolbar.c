@@ -299,13 +299,6 @@ void ui_toolbar_draw_show_3d_view() {
 	}
 }
 
-void ui_toolbar_header_menu_draw() {
-	if (ui_menu_button(tr("Toggle Header"), "", ICON_PROPERTIES)) {
-		g_config->header_pinned = false;
-	}
-	// Paint is the only tool mode, the Tools switch (Paint / Sculpt / Object) is not shown
-}
-
 static void ui_toolbar_draw_window(ui_window_t *handle, i32 x, i32 y, i32 h) {
 	if (ui_window(handle, x, y, ui_toolbar_w(false), h, false)) {
 		g_ui->image_scroll_align   = false;
@@ -314,20 +307,8 @@ static void ui_toolbar_draw_window(ui_window_t *handle, i32 x, i32 y, i32 h) {
 		bool           light       = col > 0xff666666;
 		i32            icon_accent = light ? 0xff666666 : -1;
 
-		// Menu icon
-		if (!context_is_floating_toolbar()) {
-			i32 _w = g_ui->_w;
-			g_ui->_x += 2;
-			g_ui->_y += 2;
-			g_ui->_w = ui_toolbar_w(false) - 4;
-			if (ui_icon_button("", ICON_MENU, UI_ALIGN_CENTER)) {
-				ui_menu_draw(&ui_toolbar_header_menu_draw, -1, -1);
-			}
-			g_ui->image_scroll_align = false; // Reset by ui_icon_button
-			g_ui->_w                 = _w;
-			g_ui->_x -= 2;
-			g_ui->_y += 2;
-		}
+		// No menu icon above the tools: its menu only held Toggle Header and the Tools switch, which is gone with Paint as the only mode.
+		// The tool properties stay reachable by right clicking the viewport (with Pin to Header) when the header is not pinned.
 
 		if (g_config->tools == TOOLS_SCULPT) {
 			for (i32 i = 0; i <= SCULPT_TYPE_PLATEAU; ++i) {
