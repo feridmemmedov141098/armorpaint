@@ -1066,6 +1066,12 @@ void render_path_paint_end() {
 
 	if (g_context->pdirty > 0) {
 		layers_update_linked_layers();
+		// Keep the viewport effects that only run while ddirty is recent (SSAO, render_path_base_draw_ssao) updating
+		// during a stroke and for a few frames after it. Without this the ambient occlusion keeps the old height bump
+		// until the camera moves. 1, not 2, so path tracing does not restart its accumulation on every dab.
+		if (g_context->ddirty < 1) {
+			g_context->ddirty = 1;
+		}
 	}
 
 	g_context->pdirty--;
