@@ -2,6 +2,9 @@
 #include "../global.h"
 
 static tool_type_t      _bake_to_target_tool;
+#define BAKE_TEXTURE_NODE_BEVEL 15 // Bake Mesh Maps' BAKE_TYPE_BEVEL, baked on the cpu
+u8 *bake_maps_bevel_sync(i32 w, i32 h);
+
 static bake_type_t      _bake_to_target_type;
 static render_target_t *_bake_to_target_rt;
 static render_target_t *_bake_to_target_layer_rt;
@@ -141,6 +144,23 @@ static void bake_texture_node_run(ui_node_t *node, int bake_type) {
 		rt->format = "RGBA32";
 		render_path_create_render_target(rt);
 	}
+	if (bake_type == BAKE_TEXTURE_NODE_BEVEL) { // Cpu bake of Bake Mesh Maps, uploaded to the node's target
+		u8 *px = bake_maps_bevel_sync(rt->width, rt->height);
+		if (px == NULL) {
+			console_error(tr("Unable to bake, check that the mesh has a UV map"));
+			return;
+		}
+		buffer_t      *b   = buffer_create(rt->width * rt->height * 4);
+		memcpy(b->buffer, px, b->length);
+		gpu_texture_t *tmp = gpu_create_texture_from_bytes(b, rt->width, rt->height, GPU_TEXTURE_FORMAT_RGBA32);
+		draw_begin(rt->_image, false, 0);
+		draw_set_pipeline(pipes_copy);
+		draw_image(tmp, 0, 0);
+		draw_set_pipeline(NULL);
+		draw_end();
+		gpu_delete_texture(tmp);
+		return;
+	}
 	bake_to_target(rt, bake_type, NULL, NULL);
 }
 
@@ -169,6 +189,10 @@ static void bake_texture_node_button(i32 node_id) {
 		any_array_push(bakes, tr("Bent Normal"));
 		any_array_push(bakes, tr("Thickness"));
 	}
+	while (bakes->length < BAKE_TEXTURE_NODE_BEVEL) { // Bevel keeps its index without raytracing
+		any_array_push(bakes, "-");
+	}
+	any_array_push(bakes, tr("Bevel"));
 
 	f32_array_t *values    = node->buttons->buffer[0]->default_value;
 	i32          bake_type = (i32)values->buffer[0];
