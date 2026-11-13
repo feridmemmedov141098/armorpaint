@@ -646,6 +646,12 @@ node_shader_context_t *make_mesh_run(material_t *data, i32 layer_pass) {
 		else if (g_context->viewport_mode == VIEWPORT_MODE_WORLD_NORMAL) {
 			node_shader_write_frag(kong, "output[1] = float4(n * float3(0.5, 0.5, 0.5) + float3(0.5, 0.5, 0.5), 1.0);");
 		}
+		else if (g_context->viewport_mode == VIEWPORT_MODE_BAKED_AO || g_context->viewport_mode == VIEWPORT_MODE_BAKED_CURV) {
+			// Gray map baked by Bake Mesh Maps on the first UV map, found by context_baked_map()
+			node_shader_add_texture(kong, "texbaked", "_texbaked");
+			node_shader_write_frag(kong, "float baked_v = sample_lod(texbaked, sampler_linear, tex_coord, 0.0).r;");
+			node_shader_write_frag(kong, "output[1] = float4(float3(baked_v, baked_v, baked_v), 1.0);");
+		}
 		else if (g_context->viewport_mode == VIEWPORT_MODE_PLUGIN) {
 			node_shader_write_frag(kong, "float3 output_color = basecol;");
 			if (g_context->viewport_texture != NULL) {

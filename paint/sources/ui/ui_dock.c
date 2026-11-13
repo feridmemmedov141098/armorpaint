@@ -1103,6 +1103,83 @@ static void ui_dock_render_sidebar_buttons() {
 	}
 }
 
+// Channel shown in the 3D view, picked from a dropdown at the top left of the view
+static ui_window_t *_ui_dock_channel_hwnd = NULL;
+static i32          _ui_dock_channel_x    = 0;
+static i32          _ui_dock_channel_y    = 0;
+static i32          _ui_dock_channel_w    = 0;
+static i32          _ui_dock_channel_h    = 0;
+
+// A press on the dropdown must not start a brush stroke in the view below it
+bool ui_dock_view3d_channel_hovered() {
+	return _ui_dock_channel_w > 0 && mouse_x >= _ui_dock_channel_x && mouse_x < _ui_dock_channel_x + _ui_dock_channel_w && mouse_y >= _ui_dock_channel_y &&
+	       mouse_y < _ui_dock_channel_y + _ui_dock_channel_h;
+}
+
+static void ui_dock_render_view3d_channel() {
+	_ui_dock_channel_w = 0;
+	if (!base_view3d_show || !ui_base_show || base_player) {
+		return;
+	}
+	if (_ui_dock_channel_hwnd == NULL) {
+		_ui_dock_channel_hwnd = ui_window_create();
+	}
+	viewport_mode_t modes[] = {VIEWPORT_MODE_LIT,       VIEWPORT_MODE_BASE_COLOR, VIEWPORT_MODE_ROUGHNESS, VIEWPORT_MODE_METALLIC,
+	                           VIEWPORT_MODE_NORMAL_MAP, VIEWPORT_MODE_HEIGHT,     VIEWPORT_MODE_OCCLUSION, VIEWPORT_MODE_OPACITY,
+	                           VIEWPORT_MODE_EMISSION,   VIEWPORT_MODE_MASK,       VIEWPORT_MODE_BAKED_AO,  VIEWPORT_MODE_BAKED_CURV};
+	string_array_t *names   = any_array_create_from_raw(
+        (void *[]){
+            tr("Material"),
+            tr("Base Color"),
+            tr("Roughness"),
+            tr("Metallic"),
+            tr("Normal"),
+            tr("Height"),
+            tr("Occlusion"),
+            tr("Opacity"),
+            tr("Emission"),
+            tr("Mask"),
+            tr("Ambient Occlusion (baked)"),
+            tr("Curvature (baked)"),
+        },
+        12);
+	i32 current = -1;
+	for (i32 i = 0; i < names->length; ++i) {
+		if (modes[i] == g_context->viewport_mode) {
+			current = i;
+			break;
+		}
+	}
+	if (current == -1) { // A mode picked from the Mode menu that the dropdown does not list
+		any_array_push(names, tr(ui_menubar_viewport_mode_to_string(g_context->viewport_mode)));
+		current = names->length - 1;
+	}
+
+	i32 w = math_floor(220 * UI_SCALE());
+	i32 h = math_floor(UI_ELEMENT_H() + UI_ELEMENT_OFFSET() * 3); // Room for the combo and its offsets, no scrollbar
+	i32 x = base_appx + math_floor(8 * UI_SCALE());
+	// Below the menubar, which floats in the top left of the view when the header is not pinned
+	i32 y = base_appy + (g_config->header_pinned ? 0 : ui_header_h) + math_floor(8 * UI_SCALE());
+
+	_ui_dock_channel_x = x;
+	_ui_dock_channel_y = y;
+	_ui_dock_channel_w = w;
+	_ui_dock_channel_h = h;
+
+	_ui_dock_channel_hwnd->redraws = 1; // The mode also changes from menus and shortcuts
+	if (ui_window(_ui_dock_channel_hwnd, x, y, w, h, false)) {
+		i32 picked = current;
+		ui_combo(&picked, names, tr("Channel"), false, UI_ALIGN_LEFT, false);
+		if (picked != current && picked < 12) {
+			viewport_mode_t m = modes[picked];
+			if ((m == VIEWPORT_MODE_BAKED_AO || m == VIEWPORT_MODE_BAKED_CURV) && context_baked_map(m) == NULL) {
+				console_info(tr("Nothing baked yet: use Bake Mesh Maps in the Bake tab"));
+			}
+			context_set_viewport_mode(m);
+		}
+	}
+}
+
 void ui_dock_render_ui() {
 	dock_node_t *leaves[DOCK_MAX_LEAVES];
 	i32          count = dock_collect_leaves(ui_dock_root, leaves, 0);
@@ -1123,6 +1200,7 @@ void ui_dock_render_ui() {
 		}
 	}
 	ui_dock_render_sidebar_buttons();
+	ui_dock_render_view3d_channel();
 }
 
 // ██████╗ ██████╗  █████╗  ██████╗

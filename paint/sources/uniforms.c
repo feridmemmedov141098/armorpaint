@@ -433,6 +433,10 @@ gpu_texture_t *uniforms_ext_tex_link(object_t *object, shader_data_t *mat, char 
 	else if (string_equals(link, "_sculpt_adj1")) {
 		return sculpt_get_adj_texture(1);
 	}
+	else if (string_equals(link, "_texbaked")) {
+		gpu_texture_t *image = context_baked_map(g_context->viewport_mode);
+		return image != NULL ? image : ((render_target_t *)any_map_get(render_path_render_targets, "empty_black"))->_image;
+	}
 	else if (string_equals(link, "_texviewport")) {
 		gpu_texture_t *image = g_context->viewport_texture;
 		return image != NULL ? image : ((render_target_t *)any_map_get(render_path_render_targets, "empty_black"))->_image;

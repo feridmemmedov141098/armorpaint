@@ -75,6 +75,8 @@ typedef enum {
 	VIEWPORT_MODE_MASK          = 15,
 	VIEWPORT_MODE_PATH_TRACE    = 16,
 	VIEWPORT_MODE_PLUGIN        = 17,
+	VIEWPORT_MODE_BAKED_AO      = 18, // Ambient occlusion baked by Bake Mesh Maps
+	VIEWPORT_MODE_BAKED_CURV    = 19, // Curvature baked by Bake Mesh Maps
 } viewport_mode_t;
 
 typedef enum {

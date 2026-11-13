@@ -569,6 +569,22 @@ void context_set_viewport_shader(void *viewport_shader) {
 	}
 }
 
+// The map shown by a baked viewport mode: the latest project texture Bake Mesh Maps saved for it (<name>_ao.png, <name>_curvature.png).
+// Looked up on every draw, so a rebake shows without picking the view again. NULL when nothing was baked.
+gpu_texture_t *context_baked_map(viewport_mode_t mode) {
+	char *suffix = mode == VIEWPORT_MODE_BAKED_AO ? "_ao.png" : mode == VIEWPORT_MODE_BAKED_CURV ? "_curvature.png" : NULL;
+	if (suffix == NULL) {
+		return NULL;
+	}
+	for (i32 i = g_project->_->assets->length - 1; i >= 0; --i) {
+		asset_t *a = g_project->_->assets->buffer[i];
+		if (a->name != NULL && ends_with(to_lower_case(a->name), suffix) && a->image != NULL) {
+			return a->image;
+		}
+	}
+	return NULL;
+}
+
 void context_set_viewport_texture(gpu_texture_t *image) {
 	bool bound                  = g_context->viewport_texture != NULL;
 	g_context->viewport_texture = image;
