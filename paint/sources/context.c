@@ -295,6 +295,7 @@ void context_set_layer(slot_layer_t *l) {
 		draw_begin(current, false, 0);
 
 	ui_dock_redraw(TAB_AREA_SIDEBAR0);
+	ui_dock_redraw(TAB_AREA_SIDEBAR1); // Properties of the selected layer
 	ui_view2d_hwnd->redraws = 2;
 }
 

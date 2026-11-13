@@ -26,6 +26,16 @@ char *slot_material_unique_name(ui_node_canvas_t *self, char *name) {
 	return res;
 }
 
+ui_node_canvas_t *slot_material_default_canvas_clone() {
+	if (slot_material_default_canvas == NULL) { // Synchronous
+		slot_material_default_canvas = data_get_blob("default_material.arm");
+	}
+	ui_node_canvas_t *decoded = armpack_decode(slot_material_default_canvas);
+	ui_node_canvas_t *canvas  = util_clone_canvas(decoded);
+	free(decoded);
+	return canvas;
+}
+
 slot_material_t *slot_material_create(shader_data_t *m, ui_node_canvas_t *c) {
 	slot_material_t *raw = ALLOC_INIT(slot_material_t, {0});
 	raw->nodes           = ui_nodes_create();

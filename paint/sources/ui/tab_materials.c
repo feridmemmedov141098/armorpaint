@@ -237,7 +237,16 @@ void tab_materials_draw_slots(bool mini) {
 	f32  uiy          = 0.0;
 	i32  imgw_val     = math_floor(50 * a * UI_SCALE());
 
-	for (i32 row = 0; row < math_floor(math_ceil(g_project->_->materials->length / (float)num)); ++row) {
+	// Materials owned by fill layers and masks are edited through their layer and are not listed
+	i32_array_t *vis       = i32_array_create(g_project->_->materials->length + 1);
+	i32          vis_count = 0;
+	for (i32 i = 0; i < g_project->_->materials->length; ++i) {
+		if (!slot_material_is_layer_owned(g_project->_->materials->buffer[i])) {
+			vis->buffer[vis_count++] = i;
+		}
+	}
+
+	for (i32 row = 0; row < math_floor(math_ceil(vis_count / (float)num)); ++row) {
 		i32          mult = g_config->show_asset_names ? 2 : 1;
 		f32_array_t *ar   = f32_array_create_from_raw_tmp(NULL, num * mult);
 		for (i32 i = 0; i < num * mult; ++i) {
@@ -253,14 +262,15 @@ void tab_materials_draw_slots(bool mini) {
 
 		for (i32 j = 0; j < num; ++j) {
 			i32 imgw = math_floor(50 * a * UI_SCALE());
-			i32 i    = j + row * num;
-			if (i >= g_project->_->materials->length) {
+			i32 k    = j + row * num;
+			if (k >= vis_count) {
 				ui_end_element_of_size(imgw);
 				if (g_config->show_asset_names) {
 					ui_end_element_of_size(0);
 				}
 				continue;
 			}
+			i32 i = vis->buffer[k]; // Index in the project materials
 			gpu_texture_t *img      = UI_SCALE() > 1 ? g_project->_->materials->buffer[i]->image : g_project->_->materials->buffer[i]->image_icon;
 			gpu_texture_t *img_full = g_project->_->materials->buffer[i]->image;
 
@@ -362,7 +372,7 @@ void tab_materials_draw_slots(bool mini) {
 					}
 				}
 				g_ui->_y -= slotw * 0.9 + (a - 1) * 5 * UI_SCALE();
-				if (i == g_project->_->materials->length - 1) {
+				if (k == vis_count - 1) {
 					g_ui->_y += j == num - 1 ? imgw : imgw + UI_ELEMENT_H() + UI_ELEMENT_OFFSET();
 				}
 			}

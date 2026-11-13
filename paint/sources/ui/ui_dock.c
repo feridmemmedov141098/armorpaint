@@ -340,6 +340,7 @@ void ui_dock_reset() {
 	dock_default_leaf(sidebar0, TAB_SCRIPTS);
 	dock_default_leaf(sidebar0, TAB_DEBUG);
 	dock_node_t *sidebar1 = dock_leaf_create();
+	dock_default_leaf(sidebar1, TAB_PROPERTIES);
 	dock_default_leaf(sidebar1, TAB_MATERIALS);
 	dock_default_leaf(sidebar1, TAB_BRUSHES);
 	dock_default_leaf(sidebar1, TAB_PLUGINS);

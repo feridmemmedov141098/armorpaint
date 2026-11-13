@@ -279,7 +279,7 @@ bool tab_layers_combo_blending(slot_layer_t *l, bool label) {
 	    },
 	    18);
 	i32 blending = l->blending;
-	ui_set_next_id((ui_id_t)&l->blending);
+	ui_set_next_id((ui_id_t)&l->blending + tab_layers_combo_site);
 	ui_combo(&blending, blending_combo, tr("Blending"), label, UI_ALIGN_LEFT, true);
 	bool changed = ui_item_changed();
 	if (changed) {
@@ -321,7 +321,7 @@ bool tab_layers_combo_mask_blending(slot_layer_t *l, bool label) {
 		}
 	}
 	// Drawn both on the mask row and in its context menu, the two need separate ids
-	ui_set_next_id(label ? (ui_id_t)&l->blending : (ui_id_t)&l->decal_mat);
+	ui_set_next_id((label ? (ui_id_t)&l->blending : (ui_id_t)&l->decal_mat) + tab_layers_combo_site);
 	ui_combo(&pos, combo, tr("Blending"), label, UI_ALIGN_LEFT, true);
 	bool changed = ui_item_changed();
 	if (changed) {
@@ -1190,7 +1190,7 @@ void tab_layers_button_new_menu() {
 		}
 	}
 	if (ui_menu_button(tr("Fill Layer"), "", ICON_SPHERE)) {
-		layers_create_fill_layer(UV_TYPE_UVMAP, mat4_nan(), -1);
+		layers_create_blank_fill_layer(-1); // Own color, roughness and metallic, set in the properties
 	}
 	if (ui_menu_button(tr("Decal"), "", ICON_DECAL)) {
 		layers_create_fill_layer(UV_TYPE_PROJECT, mat4_nan(), -1);

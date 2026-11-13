@@ -660,7 +660,9 @@ void history_redo_duplicate_layer(void *_) {
 }
 
 void history_redo_new_fill_mask(slot_layer_t *l) {
+	slot_layer_fill_reuse_owned = true;
 	slot_layer_to_fill_layer(l);
+	slot_layer_fill_reuse_owned = false;
 }
 
 void history_redo_new_white_mask(slot_layer_t *l) {

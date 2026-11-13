@@ -390,7 +390,7 @@ static slot_layer_t *slot_layer_copy(slot_layer_t *raw) {
 
 	l->visible            = raw->visible;
 	l->mask_opacity       = raw->mask_opacity;
-	l->fill_material      = raw->fill_material;
+	l->fill_material      = raw->fill_material; // Replaced by an own copy in slot_layer_duplicate
 	l->object_mask        = raw->object_mask;
 	l->blending           = raw->blending;
 	l->uv_type            = raw->uv_type;
@@ -427,6 +427,10 @@ slot_layer_t *slot_layer_duplicate(slot_layer_t *raw) {
 	slot_layer_t *l = slot_layer_copy(raw);
 	array_insert(g_project->_->layers, array_index_of(g_project->_->layers, raw) + 1, l);
 	tab_stages_add_layer(l->name);
+	if (slot_material_is_layer_owned(raw->fill_material)) {
+		// The copy gets its own material, editing one layer must not change the other
+		l->fill_material = slot_layer_make_owned_material(l, raw->fill_material);
+	}
 	return l;
 }
 
@@ -557,9 +561,83 @@ void slot_layer_to_fill_layer_on_next_frame(void *_) {
 	ui_dock_redraw(TAB_AREA_SIDEBAR0);
 }
 
+// Fill layers and fill masks own their material. It is edited through the layer and is not listed in the materials tab.
+// The owned material is found by its canvas name, "layer:" followed by the layer id, which is saved with the project.
+
+bool slot_material_is_layer_owned(slot_material_t *m) {
+	return m != NULL && m->canvas != NULL && starts_with(m->canvas->name, "layer:");
+}
+
+slot_material_t *slot_layer_find_owned_material(slot_layer_t *raw) {
+	char *name = string_tmp("layer:%d", raw->id);
+	for (i32 i = 0; i < g_project->_->materials->length; ++i) {
+		slot_material_t *m = g_project->_->materials->buffer[i];
+		if (string_equals(m->canvas->name, name)) {
+			return m;
+		}
+	}
+	return NULL;
+}
+
+// Gives the layer its own material and selects it: a copy of source, or the default material when source is null
+slot_material_t *slot_layer_make_owned_material(slot_layer_t *raw, slot_material_t *source) {
+	slot_material_t *m = slot_layer_find_owned_material(raw);
+	if (m != NULL && m == source) {
+		g_context->material = m;
+		return m;
+	}
+	if (m == NULL) {
+		m = slot_material_create(g_project->_->materials->buffer[0]->data, NULL);
+		any_array_push(g_project->_->materials, m);
+		if (source != NULL) {
+			m->canvas = util_clone_canvas(source->canvas);
+		}
+	}
+	else {
+		// Left over from a deleted layer with the same id
+		m->canvas = source != NULL ? util_clone_canvas(source->canvas) : slot_material_default_canvas_clone();
+	}
+	m->canvas->name = string("layer:%d", raw->id);
+	if (source != NULL) {
+		m->paint_base   = source->paint_base;
+		m->paint_opac   = source->paint_opac;
+		m->paint_occ    = source->paint_occ;
+		m->paint_rough  = source->paint_rough;
+		m->paint_met    = source->paint_met;
+		m->paint_nor    = source->paint_nor;
+		m->paint_height = source->paint_height;
+		m->paint_emis   = source->paint_emis;
+		m->paint_subs   = source->paint_subs;
+	}
+	g_context->material = m;
+	tab_materials_update_material();
+	return m;
+}
+
+// Layer ids are assigned again when a project is loaded, name the owned materials after their layers
+void slot_layer_fixup_owned_materials() {
+	for (i32 i = 0; i < g_project->_->materials->length; ++i) {
+		slot_material_t *m = g_project->_->materials->buffer[i];
+		if (slot_material_is_layer_owned(m)) {
+			m->canvas->name = "layer:orphan";
+		}
+	}
+	for (i32 i = 0; i < g_project->_->layers->length; ++i) {
+		slot_layer_t *l = g_project->_->layers->buffer[i];
+		if (slot_material_is_layer_owned(l->fill_material)) {
+			l->fill_material->canvas->name = string("layer:%d", l->id);
+		}
+	}
+}
+
 void slot_layer_to_fill_layer(slot_layer_t *raw) {
 	context_set_layer(raw);
-	raw->fill_material = g_context->material;
+	slot_material_t *own = slot_layer_find_owned_material(raw);
+	if (own == NULL || (!slot_layer_fill_reuse_owned && g_context->material != own)) {
+		own = slot_layer_make_owned_material(raw, g_context->material);
+	}
+	g_context->material = own;
+	raw->fill_material  = own;
 	layers_update_fill_layer(true);
 	sys_notify_on_next_frame(&slot_layer_to_fill_layer_on_next_frame, NULL);
 }

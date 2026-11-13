@@ -548,6 +548,7 @@ static void import_arm_trust_scripts_on_next_frame(void *_) {
 		util_render_make_material_preview();
 	}
 	g_context->material = current;
+	slot_layer_fixup_owned_materials();
 	make_material_parse_paint_material(true);
 	layers_update_fill_layers();
 	nodes_mesh_update_scripts();

@@ -231,6 +231,7 @@ void ui_base_init_tabs() {
 	_draw_callback_create(tab_layers_draw, TAB_LAYERS, "Layers", TAB_AREA_SIDEBAR0);
 	_draw_callback_create(tab_meshes_draw, TAB_MESHES, "Meshes", TAB_AREA_SIDEBAR0);
 	_draw_callback_create(tab_scripts_draw, TAB_SCRIPTS, "Scripts", TAB_AREA_SIDEBAR0);
+	_draw_callback_create(tab_properties_draw, TAB_PROPERTIES, "Properties", TAB_AREA_SIDEBAR1);
 	_draw_callback_create(tab_materials_draw, TAB_MATERIALS, "Materials", TAB_AREA_SIDEBAR1);
 	_draw_callback_create(tab_brushes_draw, TAB_BRUSHES, "Brushes", TAB_AREA_SIDEBAR1);
 	_draw_callback_create(tab_plugins_draw, TAB_PLUGINS, "Plugins", TAB_AREA_SIDEBAR1);

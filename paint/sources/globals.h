@@ -378,6 +378,10 @@ char           *tab_layers_layer_name = "";
 char           *tab_meshes_mesh_name  = "";
 slot_layer_t   *tab_layers_l;
 slot_layer_t   *tab_layers_drop_mask_layer = NULL; // Layer or group whose mask slot is under a dragged material
+bool            slot_layer_fill_reuse_owned = false; // Redo, keep the owned material of the layer as it is
+slot_material_t *layers_fill_source          = NULL;  // Material the next new fill layer copies, the active one when null
+bool            layers_fill_blank           = false; // The next new fill layer starts from the default material
+i32             tab_layers_combo_site       = 0;     // Added to the ids of layer combos drawn outside the layer row and its menu
 paint_tex_t     tab_layers_preview_tex           = PAINT_TEX_BASE;
 gpu_texture_t  *util_uv_uvmap                    = NULL;
 bool            util_uv_uvmap_cached             = false;

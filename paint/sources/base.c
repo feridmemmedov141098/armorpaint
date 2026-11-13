@@ -86,11 +86,13 @@ void base_material_dropped() {
 	if (context_in_3d_view()) {
 		uv_type_t uv_type   = keyboard_down("control") ? UV_TYPE_PROJECT : UV_TYPE_UVMAP;
 		mat4_t    decal_mat = uv_type == UV_TYPE_PROJECT ? util_render_get_decal_mat() : mat4_nan();
+		layers_fill_source = base_drag_material;
 		layers_create_fill_layer(uv_type, decal_mat, -1);
 	}
 	if (context_in_layers() && tab_layers_can_drop_new_layer(g_context->drag_dest)) {
 		uv_type_t uv_type   = keyboard_down("control") ? UV_TYPE_PROJECT : UV_TYPE_UVMAP;
 		mat4_t    decal_mat = uv_type == UV_TYPE_PROJECT ? util_render_get_decal_mat() : mat4_nan();
+		layers_fill_source  = base_drag_material;
 		layers_create_fill_layer(uv_type, decal_mat, g_context->drag_dest);
 	}
 	else if (context_in_nodes()) {

@@ -329,7 +329,8 @@ typedef enum {
 	TAB_VIEW3D    = 14,
 	TAB_VIEW2D    = 15,
 	TAB_NODES     = 16,
-	TAB_COUNT     = 17,
+	TAB_PROPERTIES = 17,
+	TAB_COUNT     = 18,
 } tab_id_t;
 
 typedef enum {

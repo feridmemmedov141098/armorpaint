@@ -844,6 +844,11 @@ void layers_create_fill_layer_on_next_frame(void *_) {
 		sculpt_init_sculpt_texture(l);
 	}
 
+	// The layer owns its material: the default one for a blank fill, otherwise a copy of the dropped or active material
+	slot_layer_make_owned_material(l, layers_fill_blank ? NULL : (layers_fill_source != NULL ? layers_fill_source : g_context->material));
+	layers_fill_blank  = false;
+	layers_fill_source = NULL;
+
 	history_to_fill_layer();
 	slot_layer_to_fill_layer(l);
 }
@@ -855,6 +860,12 @@ void layers_create_fill_layer(uv_type_t uv_type, mat4_t decal_mat, i32 position)
 	sys_notify_on_next_frame(&layers_create_fill_layer_on_next_frame, NULL);
 }
 
+// Fill layer with its own default color, roughness and metallic, independent of the materials tab
+void layers_create_blank_fill_layer(i32 position) {
+	layers_fill_blank = true;
+	layers_create_fill_layer(UV_TYPE_UVMAP, mat4_nan(), position);
+}
+
 void tab_materials_button_new_on_next_frame(void *_);
 
 void layers_create_filter_on_next_frame(void *_) {
@@ -862,15 +873,11 @@ void layers_create_filter_on_next_frame(void *_) {
 		return;
 	}
 
-	tab_materials_button_new_on_next_frame(NULL);
-
 	slot_layer_t *l = layers_new_layer(false, -1, g_context->layer);
 	history_new_layer();
+	slot_layer_make_owned_material(l, NULL); // Filter material, owned by the filter layer
 	history_to_fill_layer();
 	slot_layer_to_fill_layer(l);
-
-	// Filter material
-	g_context->material->canvas->name = string_copy(g_context->layer->name);
 
 	ui_nodes_t       *nodes  = g_context->material->nodes;
 	ui_node_canvas_t *canvas = g_context->material->canvas;
