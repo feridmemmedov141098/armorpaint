@@ -832,6 +832,37 @@ void ui_nodes_draw_menubar() {
 }
 
 // Nodes take the tab they are docked in
+// The node set the view was last framed on, NULL while the editor is closed
+static ui_nodes_t *_ui_nodes_framed = NULL;
+
+// Pans the view so the nodes of the canvas sit in the middle of the editor, below its header.
+// Works in canvas units, so it holds for any window size, aspect ratio and zoom.
+static void ui_nodes_center_view(ui_nodes_t *nodes, ui_node_canvas_t *canvas, f32 header_h) {
+	if (canvas == NULL || canvas->nodes->length == 0 || ui_nodes_ww <= 0 || ui_nodes_wh <= 0) {
+		return;
+	}
+	f32 x0           = 1e9;
+	f32 y0           = 1e9;
+	f32 x1           = -1e9;
+	f32 y1           = -1e9;
+	f32 height_scale = UI_NODES_SCALE(); // UI_NODE_H is in pixels at this scale
+	for (i32 i = 0; i < canvas->nodes->length; ++i) {
+		ui_node_t *n = canvas->nodes->buffer[i];
+		f32        w = n->width != 0 ? n->width : 140.0;
+		f32        h = height_scale > 0 ? UI_NODE_H(canvas, n) / height_scale : 0;
+		x0           = math_min(x0, n->x);
+		y0           = math_min(y0, n->y);
+		x1           = math_max(x1, n->x + w);
+		y1           = math_max(y1, n->y + h);
+	}
+	// Matches UI_NODES_PAN_X / UI_NODES_PAN_Y: screen = (canvas + pan) * scale + zoom offset
+	f32 scale  = UI_SCALE() * nodes->zoom;
+	f32 zoom_x = (1.0 - nodes->zoom) * nodes->uiw / 2.5;
+	f32 zoom_y = (1.0 - nodes->zoom) * nodes->uih / 2.5;
+	nodes->pan_x = (ui_nodes_ww / 2.0 - zoom_x) / scale - (x0 + x1) / 2.0;
+	nodes->pan_y = (header_h + (ui_nodes_wh - header_h) / 2.0 - zoom_y) / scale - (y0 + y1) / 2.0;
+}
+
 void ui_nodes_update_rect() {
 	ui_dock_layout();
 }
@@ -923,6 +954,7 @@ void ui_nodes_update(void *_) {
 	ui_nodes_release_link = g_ui->input_released;
 
 	if (!ui_nodes_show) {
+		_ui_nodes_framed = NULL; // Frame the nodes again when the editor is opened
 		return;
 	}
 
@@ -1023,6 +1055,12 @@ void ui_nodes_update(void *_) {
 		g_ui->window_border_right  = iron_window_width() - ui_nodes_wx - ui_nodes_ww;
 		g_ui->window_border_top    = ui_nodes_wy + (ui_base_show ? ui_header_h * 2 : 0);
 		g_ui->window_border_bottom = iron_window_height() - ui_nodes_wy - ui_nodes_wh;
+
+		// Opening the editor, or switching it to another layer's or asset's nodes, puts them in the middle of the view
+		if (ui_nodes != _ui_nodes_framed) {
+			ui_nodes_center_view(ui_nodes, c, header_h);
+			_ui_nodes_framed = ui_nodes;
+		}
 
 		ui_node_canvas(ui_nodes, c);
 		g_ui->input_enabled = _input_enabled;
