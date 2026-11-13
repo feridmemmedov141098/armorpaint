@@ -89,6 +89,65 @@ char *make_mesh_context_id(i32 layer_pass) {
 	return ids[layer_pass];
 }
 
+// One step of a mask stack, dst is the stack below and src the mask entry.
+// Matches mask_merge.shader, which flattens the same stack for merging and export.
+static char *make_mesh_mask_blend(i32 blending, char *dst, char *src, char *opac) {
+	if (blending == BLEND_TYPE_ADD) {
+		return string_tmp("clamp(%s + %s * %s, 0.0, 1.0)", dst, src, opac);
+	}
+	if (blending == BLEND_TYPE_SUBTRACT) {
+		return string_tmp("clamp(%s - %s * %s, 0.0, 1.0)", dst, src, opac);
+	}
+	if (blending == BLEND_TYPE_LIGHTEN) {
+		return string_tmp("max(%s, %s * %s)", dst, src, opac);
+	}
+	if (blending == BLEND_TYPE_DARKEN) {
+		return string_tmp("lerp(%s, min(%s, %s), %s)", dst, dst, src, opac);
+	}
+	return string_tmp("%s * lerp(1.0, %s, %s)", dst, src, opac); // Multiply
+}
+
+// Multiplies result by the mask stacks that apply to a layer.
+// The masks of the layer and the masks of each parent group are separate stacks, each blends bottom to top from white,
+// then the stacks multiply so a group mask always limits what is inside the group.
+// tex_prefix + mask id is the name of the bound mask texture, uid keeps the generated names unique per caller.
+static void make_mesh_write_mask_stacks(node_shader_t *kong, slot_layer_t_array_t *masks, char *result, char *tex_prefix, char *tex_coord, char *uid) {
+	for (i32 i = 0; i < masks->length; ++i) {
+		slot_layer_t *owner = masks->buffer[i]->parent;
+		bool          first = true; // First mask of this owner
+		for (i32 j = 0; j < i; ++j) {
+			if (masks->buffer[j]->parent == owner) {
+				first = false;
+				break;
+			}
+		}
+		if (!first) {
+			continue;
+		}
+
+		char *stack   = string_tmp("mask_stack%s_%s", uid, i32_to_string(i));
+		bool  written = false;
+		for (i32 j = i; j < masks->length; ++j) {
+			slot_layer_t *m = masks->buffer[j];
+			if (m->parent != owner || !slot_layer_is_visible(m)) {
+				continue;
+			}
+			if (!written) {
+				node_shader_write_frag(kong, string_tmp("float %s = 1.0;", stack));
+				written = true;
+			}
+			char *sample = string_tmp("mask_sample%s_%s", uid, i32_to_string(m->id));
+			char *opac   = string_tmp("float(%s)", f32_to_string(slot_layer_get_opacity(m)));
+			node_shader_write_frag(kong, string_tmp("float %s = sample_lod(%s%s, sampler_linear, %s, 0.0).r;", sample, tex_prefix, i32_to_string(m->id),
+			                                        tex_coord));
+			node_shader_write_frag(kong, string_tmp("%s = %s;", stack, make_mesh_mask_blend(slot_layer_get_mask_blending(m), stack, sample, opac)));
+		}
+		if (written) {
+			node_shader_write_frag(kong, string_tmp("%s *= %s;", result, stack));
+		}
+	}
+}
+
 node_shader_context_t *make_mesh_run(material_t *data, i32 layer_pass) {
 	char                  *context_id = make_mesh_context_id(layer_pass);
 	shader_context_t      *props      = ALLOC_INIT(shader_context_t, {.name            = context_id,
@@ -337,19 +396,11 @@ node_shader_context_t *make_mesh_run(material_t *data, i32 layer_pass) {
 					node_shader_write_frag(kong, string_tmp("float %s = 1.0;", texpaint_mask));
 					for (i32 i = 0; i < masks->length; ++i) {
 						slot_layer_t *m = masks->buffer[i];
-						if (!slot_layer_is_visible(m)) {
-							continue;
+						if (slot_layer_is_visible(m)) {
+							node_shader_add_texture(kong, string_tmp("texpaint%s", i32_to_string(m->id)), NULL);
 						}
-						node_shader_add_texture(kong, string_tmp("texpaint%s", i32_to_string(m->id)), NULL);
-						node_shader_write_frag(kong, "{"); // Group mask is sampled across multiple layers
-						node_shader_write_frag(kong, string_tmp("float texpaint_mask_sample%s = sample_lod(texpaint%s, sampler_linear, %s, 0.0).r;",
-						                                        i32_to_string(m->id), i32_to_string(m->id), tex_coord));
-
-						f32 opac = slot_layer_get_opacity(m);
-						node_shader_write_frag(kong, string_tmp("%s *= lerp(1.0, %s, float(%s));", texpaint_mask,
-						                                        string_tmp("texpaint_mask_sample%s", i32_to_string(m->id)), f32_to_string(opac)));
-						node_shader_write_frag(kong, "}");
 					}
+					make_mesh_write_mask_stacks(kong, masks, texpaint_mask, "texpaint", tex_coord, i32_to_string(l->id));
 					node_shader_write_frag(kong, string_tmp("texpaint_opac *= clamp(%s, 0.0, 1.0);", texpaint_mask));
 				}
 			}
@@ -624,16 +675,7 @@ node_shader_context_t *make_mesh_run(material_t *data, i32 layer_pass) {
 			}
 			else {
 				node_shader_write_frag(kong, "float mask_view = 1.0;");
-				for (i32 i = 0; i < slot_layer_get_masks(g_context->layer, true)->length; ++i) {
-					slot_layer_t *m = slot_layer_get_masks(g_context->layer, true)->buffer[i];
-					if (!slot_layer_is_visible(m)) {
-						continue;
-					}
-					node_shader_write_frag(kong, string_tmp("float mask_sample%s = sample_lod(texpaint_view_mask%s, sampler_linear, %s, 0.0).r;",
-					                                        i32_to_string(m->id), i32_to_string(m->id), tex_coord_layer));
-					f32 opac = slot_layer_get_opacity(m);
-					node_shader_write_frag(kong, string_tmp("mask_view *= lerp(1.0, mask_sample%s, float(%s));", i32_to_string(m->id), f32_to_string(opac)));
-				}
+				make_mesh_write_mask_stacks(kong, slot_layer_get_masks(g_context->layer, true), "mask_view", "texpaint_view_mask", tex_coord_layer, "v");
 			}
 			node_shader_write_frag(kong, "output[1] = float4(mask_view, mask_view, mask_view, 1.0);");
 		}

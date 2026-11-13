@@ -297,6 +297,39 @@ void tab_layers_layer_toggle_visible(slot_layer_t *l) {
 	make_material_parse_mesh_material();
 }
 
+// How a mask combines with the masks below it in the stack of its layer or group
+bool tab_layers_combo_mask_blending(slot_layer_t *l, bool label) {
+	static i32      modes[] = {BLEND_TYPE_MULTIPLY, BLEND_TYPE_ADD, BLEND_TYPE_SUBTRACT, BLEND_TYPE_LIGHTEN, BLEND_TYPE_DARKEN};
+	string_array_t *combo   = any_array_create_from_raw_tmp(
+        (void *[]){
+            tr("Multiply"),
+            tr("Add"),
+            tr("Subtract"),
+            tr("Lighten"),
+            tr("Darken"),
+        },
+        5);
+	i32 current = slot_layer_get_mask_blending(l);
+	i32 pos     = 0;
+	for (i32 i = 0; i < 5; ++i) {
+		if (modes[i] == current) {
+			pos = i;
+		}
+	}
+	// Drawn both on the mask row and in its context menu, the two need separate ids
+	ui_set_next_id(label ? (ui_id_t)&l->blending : (ui_id_t)&l->decal_mat);
+	ui_combo(&pos, combo, tr("Blending"), label, UI_ALIGN_LEFT, true);
+	bool changed = ui_item_changed();
+	if (changed) {
+		context_set_layer(l);
+		history_layer_blending();
+		l->blending = modes[pos];
+		make_material_parse_mesh_material();
+		g_context->layer_preview_dirty = true;
+	}
+	return changed;
+}
+
 bool tab_layers_can_delete(slot_layer_t *l) {
 	i32 num_layers = 0;
 
@@ -341,6 +374,7 @@ void tab_layers_draw_layer_slot_full(slot_layer_t *l, i32 i) {
 
 	bool has_children = tab_layers_has_children(l);
 	bool has_combos   = !slot_layer_is_group(l) && !slot_layer_is_mask(l) && !slot_layer_is_filter(l);
+	bool mask_combo   = slot_layer_is_mask(l); // Blending with the masks below
 
 	// Columns: eye | indent | icon | name | combo | expand arrow
 	i32 depth = 0;
@@ -357,7 +391,7 @@ void tab_layers_draw_layer_slot_full(slot_layer_t *l, i32 i) {
 	f32 arrow_x  = uix + uiw - arrow_w;
 	f32 combo_w  = uiw * 0.30;
 	f32 combo_x  = arrow_x - combo_w;
-	f32 name_end = has_combos ? combo_x : arrow_x;
+	f32 name_end = (has_combos || mask_combo) ? combo_x : arrow_x;
 
 	// Draw eye icon
 	f32_array_t *row = f32_array_create_from_raw_tmp(
@@ -455,6 +489,12 @@ void tab_layers_draw_layer_slot_full(slot_layer_t *l, i32 i) {
 		g_ui->_w = combo_w;
 		tab_layers_combo_object(l, false);
 	}
+	if (mask_combo) {
+		g_ui->_x = combo_x;
+		g_ui->_y = uiy + center;
+		g_ui->_w = combo_w;
+		tab_layers_combo_mask_blending(l, false);
+	}
 
 	// Expand arrow, enlarged and centered in its column
 	if (has_children) {
@@ -546,6 +586,19 @@ bool tab_layers_can_merge_down(slot_layer_t *l) {
 	// Masks must be merged down to masks
 	if (slot_layer_is_mask(l) && !slot_layer_is_mask(g_project->_->layers->buffer[index - 1])) {
 		return false;
+	}
+	// Merging two masks keeps the look only when the result does not depend on the masks under them:
+	// the lower one multiplies, and either the upper one multiplies too or the lower one is the bottom of the stack
+	if (slot_layer_is_mask(l)) {
+		slot_layer_t *lower     = g_project->_->layers->buffer[index - 1];
+		slot_layer_t *under     = index - 2 >= 0 ? g_project->_->layers->buffer[index - 2] : NULL;
+		bool          is_bottom = under == NULL || !slot_layer_is_mask(under) || under->parent != l->parent;
+		if (slot_layer_get_mask_blending(lower) != BLEND_TYPE_MULTIPLY) {
+			return false;
+		}
+		if (slot_layer_get_mask_blending(l) != BLEND_TYPE_MULTIPLY && !is_bottom) {
+			return false;
+		}
 	}
 	return true;
 }
@@ -686,8 +739,13 @@ void tab_layers_draw_layer_context_menu_draw() {
 	if (slot_layer_is_mask(l) && l->fill_material == NULL && ui_menu_button(tr("Invert"), "", ICON_INVERT)) {
 		sys_notify_on_next_frame(&tab_layers_draw_layer_context_menu_invert, NULL);
 	}
-	if (slot_layer_is_mask(l) && ui_menu_button(tr("Apply"), "", ICON_CHECK)) {
-		sys_notify_on_next_frame(&tab_layers_draw_layer_context_menu_apply, NULL);
+	if (slot_layer_is_mask(l)) {
+		// A single mask can be baked into the layer only while the stack is all multiply
+		g_ui->enabled = slot_layer_mask_stack_is_multiply(l->parent);
+		if (ui_menu_button(tr("Apply"), "", ICON_CHECK)) {
+			sys_notify_on_next_frame(&tab_layers_draw_layer_context_menu_apply, NULL);
+		}
+		g_ui->enabled = true;
 	}
 	if (slot_layer_is_group(l)) {
 		g_ui->enabled = slot_layer_shows(l) || tab_layers_can_delete(l);
@@ -710,6 +768,12 @@ void tab_layers_draw_layer_context_menu_draw() {
 	if (!slot_layer_is_group(l) && !slot_layer_is_mask(l) && !slot_layer_is_filter(l) && l->texpaint_sculpt == NULL) {
 		ui_menu_align();
 		if (tab_layers_combo_blending(l, true)) {
+			ui_menu_keep_open = true;
+		}
+	}
+	if (slot_layer_is_mask(l)) {
+		ui_menu_align();
+		if (tab_layers_combo_mask_blending(l, true)) {
 			ui_menu_keep_open = true;
 		}
 	}

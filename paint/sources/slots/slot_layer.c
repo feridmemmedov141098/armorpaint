@@ -134,7 +134,7 @@ slot_layer_t *slot_layer_create(char *ext, layer_slot_type_t type, slot_layer_t 
 		i32 id        = (raw->id + 1);
 		raw->name     = string("Mask %d", id);
 		char *format  = "RGBA32"; // Full bits for undo support, R8 is used
-		raw->blending = BLEND_TYPE_MIX;
+		raw->blending = BLEND_TYPE_MULTIPLY; // Mask stack entry, see slot_layer_get_mask_blending
 
 		{
 			render_target_t *t = render_target_create();
@@ -741,6 +741,29 @@ i32 slot_layer_get_object_mask(slot_layer_t *raw) {
 
 i32 slot_layer_get_blending(slot_layer_t *raw) {
 	return slot_layer_is_filter(raw) ? raw->parent->blending : raw->blending;
+}
+
+// How a mask combines with the masks below it in the stack of its layer or group.
+// Masks hold a single value per pixel without coverage, so mix would replace everything below,
+// it is treated as multiply. This also keeps masks saved before blending modes existed unchanged.
+i32 slot_layer_get_mask_blending(slot_layer_t *raw) {
+	if (raw->blending == BLEND_TYPE_ADD || raw->blending == BLEND_TYPE_SUBTRACT || raw->blending == BLEND_TYPE_LIGHTEN ||
+	    raw->blending == BLEND_TYPE_DARKEN) {
+		return raw->blending;
+	}
+	return BLEND_TYPE_MULTIPLY;
+}
+
+// The stack is all multiply, its masks commute and can be applied or merged one at a time
+bool slot_layer_mask_stack_is_multiply(slot_layer_t *owner) {
+	slot_layer_t_array_t *masks = slot_layer_get_masks(owner, false);
+	for (i32 i = 0; masks != NULL && i < masks->length; ++i) {
+		slot_layer_t *m = masks->buffer[i];
+		if (m->visible && slot_layer_get_mask_blending(m) != BLEND_TYPE_MULTIPLY) {
+			return false;
+		}
+	}
+	return true;
 }
 
 bool slot_layer_is_layer(slot_layer_t *raw) {

@@ -918,15 +918,41 @@ void layers_duplicate_layer(slot_layer_t *l) {
 	context_set_layer(new_layer);
 }
 
+// Bakes the mask stack of a layer or group into its content and removes the masks
 void layers_apply_masks(slot_layer_t *l) {
 	slot_layer_t_array_t *masks = slot_layer_get_masks(l, false);
+	if (masks == NULL) {
+		return;
+	}
 
-	if (masks != NULL) {
+	if (slot_layer_mask_stack_is_multiply(l)) {
+		// Multiply masks commute, apply them one at a time
 		for (i32 i = 0; i < masks->length; ++i) {
 			masks->buffer[i]->visible ? slot_layer_apply_mask(masks->buffer[i]) : slot_layer_delete(masks->buffer[i]);
 		}
-		g_context->layer_preview_dirty = true;
 	}
+	else {
+		// Other blending modes depend on the masks below, apply the flattened stack
+		if (l->fill_material != NULL) {
+			slot_layer_to_paint_layer(l);
+		}
+		slot_layer_t m = {0};
+		m.texpaint     = layers_flatten_masks(l, false);
+		m.mask_opacity = 1.0;
+		if (slot_layer_is_group(l)) {
+			slot_layer_t_array_t *children = slot_layer_get_children(l);
+			for (i32 i = 0; children != NULL && i < children->length; ++i) {
+				layers_apply_mask(children->buffer[i], &m);
+			}
+		}
+		else {
+			layers_apply_mask(l, &m);
+		}
+		for (i32 i = 0; i < masks->length; ++i) {
+			slot_layer_delete(masks->buffer[i]);
+		}
+	}
+	g_context->layer_preview_dirty = true;
 }
 
 static void layers_bake_opacity(slot_layer_t *l) {
@@ -1022,10 +1048,7 @@ slot_layer_t *layers_merge_group(slot_layer_t *l) {
 		}
 	}
 
-	slot_layer_t_array_t *masks = slot_layer_get_masks(l, false);
-	for (i32 i = 0; masks != NULL && i < masks->length; ++i) {
-		masks->buffer[i]->visible ? slot_layer_apply_mask(masks->buffer[i]) : slot_layer_delete(masks->buffer[i]);
-	}
+	layers_apply_masks(l);
 
 	direct = slot_layer_get_direct_children(l);
 	for (i32 i = 0; i < direct->length; ++i) {
@@ -1096,7 +1119,7 @@ void layers_merge_layer(slot_layer_t *l0, slot_layer_t *l1, bool use_mask) {
 		gpu_set_texture(pipes_tex0_merge_mask, l1->texpaint);
 		gpu_set_texture(pipes_texa_merge_mask, layers_temp_image);
 		gpu_set_float(pipes_opac_merge_mask, l1->mask_opacity);
-		gpu_set_int(pipes_blending_merge_mask, BLEND_TYPE_MULTIPLY);
+		gpu_set_int(pipes_blending_merge_mask, slot_layer_get_mask_blending(l1));
 		gpu_set_vertex_buffer(const_data_screen_aligned_vb);
 		gpu_set_index_buffer(const_data_screen_aligned_ib);
 		gpu_draw();
@@ -1305,6 +1328,82 @@ static slot_layer_t *layers_move_preview(slot_layer_t *l) {
 	return &moved;
 }
 
+static gpu_texture_t *layers_temp_mask_stack = NULL; // One mask stack, while pipes_temp_mask_image holds the product of the stacks
+
+// Blends the masks of owner into target, bottom to top from white
+static void layers_flatten_mask_stack(gpu_texture_t *target, slot_layer_t_array_t *masks, slot_layer_t *owner, bool move_preview) {
+	draw_begin(target, true, 0xffffffff);
+	draw_end();
+	slot_layer_t dst = {0};
+	dst.texpaint     = target;
+	for (i32 i = 0; i < masks->length; ++i) {
+		slot_layer_t *m = masks->buffer[i];
+		if (m->parent == owner) {
+			layers_merge_layer(&dst, move_preview ? layers_move_preview(m) : m, false);
+		}
+	}
+}
+
+// Flattens the masks that apply to a layer into pipes_temp_mask_image, null when the layer has no masks.
+// The masks of the layer and of each parent group are separate stacks, each blends with its own modes and the stacks multiply.
+static gpu_texture_t *_layers_flatten_masks(slot_layer_t *l, bool include_group_masks, bool move_preview) {
+	slot_layer_t_array_t *masks = slot_layer_get_masks(l, include_group_masks);
+	if (masks == NULL) {
+		return NULL;
+	}
+	layers_make_temp_mask_img();
+
+	bool single_owner = true;
+	for (i32 i = 1; i < masks->length; ++i) {
+		if (masks->buffer[i]->parent != masks->buffer[0]->parent) {
+			single_owner = false;
+			break;
+		}
+	}
+	if (single_owner) {
+		layers_flatten_mask_stack(pipes_temp_mask_image, masks, masks->buffer[0]->parent, move_preview);
+		return pipes_temp_mask_image;
+	}
+
+	if (layers_temp_mask_stack != NULL &&
+	    (layers_temp_mask_stack->width != pipes_temp_mask_image->width || layers_temp_mask_stack->height != pipes_temp_mask_image->height)) {
+		gpu_delete_texture(layers_temp_mask_stack);
+		layers_temp_mask_stack = NULL;
+	}
+	if (layers_temp_mask_stack == NULL) {
+		layers_temp_mask_stack = gpu_create_render_target(pipes_temp_mask_image->width, pipes_temp_mask_image->height, GPU_TEXTURE_FORMAT_RGBA32);
+	}
+
+	draw_begin(pipes_temp_mask_image, true, 0xffffffff);
+	draw_end();
+	slot_layer_t product = {0};
+	product.texpaint     = pipes_temp_mask_image;
+	slot_layer_t stack   = {0};
+	stack.texpaint       = layers_temp_mask_stack;
+	stack.visible        = true;
+	stack.mask_opacity   = 1.0;
+	stack.blending       = BLEND_TYPE_MULTIPLY;
+	for (i32 i = 0; i < masks->length; ++i) {
+		slot_layer_t *owner = masks->buffer[i]->parent;
+		bool          first = true; // First mask of this owner
+		for (i32 j = 0; j < i; ++j) {
+			if (masks->buffer[j]->parent == owner) {
+				first = false;
+				break;
+			}
+		}
+		if (first) {
+			layers_flatten_mask_stack(layers_temp_mask_stack, masks, owner, move_preview);
+			layers_merge_layer(&product, &stack, false);
+		}
+	}
+	return pipes_temp_mask_image;
+}
+
+gpu_texture_t *layers_flatten_masks(slot_layer_t *l, bool include_group_masks) {
+	return _layers_flatten_masks(l, include_group_masks, false);
+}
+
 slot_layer_t *layers_flatten(bool height_to_normal, slot_layer_t_array_t *layers) {
 	if (layers == NULL) {
 		layers = g_project->_->layers;
@@ -1338,14 +1437,7 @@ slot_layer_t *layers_flatten(bool height_to_normal, slot_layer_t_array_t *layers
 		gpu_texture_t        *mask    = empty;
 		slot_layer_t_array_t *l1masks = slot_layer_get_masks(l1, true);
 		if (l1masks != NULL) {
-			layers_make_temp_mask_img();
-			draw_begin(pipes_temp_mask_image, GPU_CLEAR_COLOR, 0xffffffff);
-			draw_end();
-			slot_layer_t *l1 = ALLOC_INIT(slot_layer_t, {.texpaint = pipes_temp_mask_image});
-			for (i32 i = 0; i < l1masks->length; ++i) {
-				layers_merge_layer(l1, layers_move_preview(l1masks->buffer[i]), false);
-			}
-			mask = pipes_temp_mask_image;
+			mask = _layers_flatten_masks(l1, true, true);
 		}
 
 		l1 = layers_move_preview(l1);

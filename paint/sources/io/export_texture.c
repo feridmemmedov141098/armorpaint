@@ -322,14 +322,7 @@ static void export_texture_run_layers(char *path, slot_layer_t_array_t *layers, 
 		gpu_texture_t        *mask    = empty;
 		slot_layer_t_array_t *l1masks = slot_layer_get_masks(l1, true);
 		if (l1masks != NULL && !bake_material) {
-			layers_make_temp_mask_img();
-			draw_begin(pipes_temp_mask_image, true, 0xffffffff);
-			draw_end();
-			slot_layer_t *l1 = ALLOC_INIT(slot_layer_t, {.texpaint = pipes_temp_mask_image});
-			for (i32 i = 0; i < l1masks->length; ++i) {
-				layers_merge_layer(l1, l1masks->buffer[i], false);
-			}
-			mask = pipes_temp_mask_image;
+			mask = layers_flatten_masks(l1, true);
 		}
 
 		// Shared layers of udim tiles are cropped out of the atlas, tile layers go into the atlas when exporting it whole

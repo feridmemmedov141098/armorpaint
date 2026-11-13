@@ -47,6 +47,9 @@ bool                  slot_layer_is_descendant(slot_layer_t *raw, slot_layer_t *
 i32                   slot_layer_count_descendants(slot_layer_t *raw);
 slot_layer_t_array_t *slot_layer_get_masks(slot_layer_t *raw, bool include_group_masks);
 bool                  slot_layer_has_masks(slot_layer_t *raw, bool include_group_masks);
+i32                   slot_layer_get_mask_blending(slot_layer_t *raw);
+bool                  slot_layer_mask_stack_is_multiply(slot_layer_t *owner);
+gpu_texture_t        *layers_flatten_masks(slot_layer_t *l, bool include_group_masks);
 bool                  slot_layer_has_visible_filter(slot_layer_t *raw);
 slot_layer_t_array_t *slot_layer_get_filters(slot_layer_t *raw, bool include_group_filters);
 f32                   slot_layer_get_opacity(slot_layer_t *raw);
