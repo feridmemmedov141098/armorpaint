@@ -359,9 +359,243 @@ void project_import_mesh(bool replace_existing, void (*done)(void)) {
 	ui_files_show(formats, false, false, &project_import_mesh_on_file_picked);
 }
 
+// UV reprojection on reimport: layers are textures laid out by the old UVs. After the mesh is reimported, triangles of the
+// new mesh are matched to triangles of the old mesh by their corner positions, and every layer texture is redrawn so each
+// new texel takes the old texel at the same point of the surface. Changed geometry keeps no paint.
+
+static f32_array_t *_project_old_tris = NULL; // Per triangle: 3 positions (9 floats) then 3 uvs (6 floats)
+
+static f32_array_t *project_collect_triangles() {
+	f32_array_t *out = f32_array_create(0);
+	for (i32 i = 0; i < g_project->_->paint_objects->length; ++i) {
+		mesh_data_t *md  = g_project->_->paint_objects->buffer[i]->data;
+		i16_array_t *pos = NULL;
+		i16_array_t *tex = NULL;
+		for (i32 j = 0; j < md->vertex_arrays->length; ++j) {
+			vertex_array_t *va = md->vertex_arrays->buffer[j];
+			if (string_equals(va->attrib, "pos")) {
+				pos = va->values;
+			}
+			else if (string_equals(va->attrib, "tex")) {
+				tex = va->values;
+			}
+		}
+		if (pos == NULL || tex == NULL) {
+			continue;
+		}
+		u32_array_t *ind = md->index_array;
+		for (i32 t = 0; t + 2 < (i32)ind->length; t += 3) {
+			for (i32 c = 0; c < 3; ++c) {
+				u32 v = ind->buffer[t + c];
+				f32_array_push(out, pos->buffer[v * 4] / 32767.0 * md->scale_pos);
+				f32_array_push(out, pos->buffer[v * 4 + 1] / 32767.0 * md->scale_pos);
+				f32_array_push(out, pos->buffer[v * 4 + 2] / 32767.0 * md->scale_pos);
+			}
+			for (i32 c = 0; c < 3; ++c) {
+				u32 v = ind->buffer[t + c];
+				f32_array_push(out, tex->buffer[v * 2] / 32767.0 * md->scale_tex);
+				f32_array_push(out, tex->buffer[v * 2 + 1] / 32767.0 * md->scale_tex);
+			}
+		}
+	}
+	return out;
+}
+
+static u64 project_corner_hash(f32 *p) {
+	i64 x = (i64)llround(p[0] * 10000.0);
+	i64 y = (i64)llround(p[1] * 10000.0);
+	i64 z = (i64)llround(p[2] * 10000.0);
+	u64 h = (u64)x * 0x9E3779B97F4A7C15ull ^ (u64)y * 0xC2B2AE3D27D4EB4Full ^ (u64)z * 0x165667B19E3779F9ull;
+	return h ^ (h >> 29);
+}
+
+static bool project_same_point(f32 *a, f32 *b) {
+	return fabsf(a[0] - b[0]) < 0.0002 && fabsf(a[1] - b[1]) < 0.0002 && fabsf(a[2] - b[2]) < 0.0002;
+}
+
+// For every texel of a w x h layer, the old texel holding the same surface point, -1 where nothing matches
+static i32 *project_reprojection_map(f32_array_t *old_tris, f32_array_t *new_tris, i32 w, i32 h) {
+	i32  old_count = old_tris->length / 15;
+	i32  cap       = 1;
+	while (cap < old_count * 2) {
+		cap <<= 1;
+	}
+	i32 *table = malloc(sizeof(i32) * cap);
+	for (i32 i = 0; i < cap; ++i) {
+		table[i] = -1;
+	}
+	for (i32 t = 0; t < old_count; ++t) {
+		f32 *p   = old_tris->buffer + t * 15;
+		u64  key = project_corner_hash(p) + project_corner_hash(p + 3) + project_corner_hash(p + 6); // Corner order does not matter
+		u32  s   = (u32)(key & (cap - 1));
+		while (table[s] != -1) {
+			s = (s + 1) & (cap - 1);
+		}
+		table[s] = t;
+	}
+
+	i32 *map = malloc(sizeof(i32) * w * h);
+	for (i32 i = 0; i < w * h; ++i) {
+		map[i] = -1;
+	}
+	i32 new_count = new_tris->length / 15;
+	for (i32 t = 0; t < new_count; ++t) {
+		f32 *np  = new_tris->buffer + t * 15;
+		u64  key = project_corner_hash(np) + project_corner_hash(np + 3) + project_corner_hash(np + 6);
+		u32  s   = (u32)(key & (cap - 1));
+		f32  old_uv[6];
+		bool found = false;
+		while (!found && table[s] != -1) {
+			f32 *op = old_tris->buffer + table[s] * 15;
+			i32  hit = 0;
+			for (i32 c = 0; c < 3; ++c) {
+				for (i32 d = 0; d < 3; ++d) {
+					if (project_same_point(np + c * 3, op + d * 3)) {
+						old_uv[c * 2]     = op[9 + d * 2];
+						old_uv[c * 2 + 1] = op[9 + d * 2 + 1];
+						hit++;
+						break;
+					}
+				}
+			}
+			found = hit == 3;
+			s     = (s + 1) & (cap - 1);
+		}
+		if (!found) {
+			continue;
+		}
+
+		// Rasterize the new triangle in texel space, interpolate the old uv at each texel center
+		f32 *uv = np + 9;
+		f32  x0 = uv[0] * w, y0 = uv[1] * h, x1 = uv[2] * w, y1 = uv[3] * h, x2 = uv[4] * w, y2 = uv[5] * h;
+		f32  area = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0);
+		if (fabsf(area) < 1e-12) {
+			continue;
+		}
+		i32 minx = (i32)math_floor(math_min(x0, math_min(x1, x2)));
+		i32 maxx = (i32)math_ceil(math_max(x0, math_max(x1, x2)));
+		i32 miny = (i32)math_floor(math_min(y0, math_min(y1, y2)));
+		i32 maxy = (i32)math_ceil(math_max(y0, math_max(y1, y2)));
+		minx     = minx < 0 ? 0 : minx;
+		miny     = miny < 0 ? 0 : miny;
+		maxx     = maxx > w - 1 ? w - 1 : maxx;
+		maxy     = maxy > h - 1 ? h - 1 : maxy;
+		for (i32 y = miny; y <= maxy; ++y) {
+			for (i32 x = minx; x <= maxx; ++x) {
+				f32 px = x + 0.5;
+				f32 py = y + 0.5;
+				f32 b0 = ((x1 - px) * (y2 - py) - (x2 - px) * (y1 - py)) / area;
+				f32 b1 = ((x2 - px) * (y0 - py) - (x0 - px) * (y2 - py)) / area;
+				f32 b2 = 1.0 - b0 - b1;
+				if (b0 < -0.001 || b1 < -0.001 || b2 < -0.001) {
+					continue;
+				}
+				f32 u  = b0 * old_uv[0] + b1 * old_uv[2] + b2 * old_uv[4];
+				f32 v  = b0 * old_uv[1] + b1 * old_uv[3] + b2 * old_uv[5];
+				i32 ox = (i32)(u * w);
+				i32 oy = (i32)(v * h);
+				ox     = ox < 0 ? 0 : ox > w - 1 ? w - 1 : ox;
+				oy     = oy < 0 ? 0 : oy > h - 1 ? h - 1 : oy;
+				map[y * w + x] = oy * w + ox;
+			}
+		}
+	}
+	free(table);
+
+	// Grow covered texels a few texels out so seams do not bleed the background in
+	i32 *next = malloc(sizeof(i32) * w * h);
+	for (i32 pass = 0; pass < 4; ++pass) {
+		memcpy(next, map, sizeof(i32) * w * h);
+		for (i32 y = 0; y < h; ++y) {
+			for (i32 x = 0; x < w; ++x) {
+				i32 i = y * w + x;
+				if (map[i] != -1) {
+					continue;
+				}
+				if (x > 0 && map[i - 1] != -1) {
+					next[i] = map[i - 1];
+				}
+				else if (x < w - 1 && map[i + 1] != -1) {
+					next[i] = map[i + 1];
+				}
+				else if (y > 0 && map[i - w] != -1) {
+					next[i] = map[i - w];
+				}
+				else if (y < h - 1 && map[i + w] != -1) {
+					next[i] = map[i + w];
+				}
+			}
+		}
+		memcpy(map, next, sizeof(i32) * w * h);
+	}
+	free(next);
+	return map;
+}
+
+static void project_reproject_texture(gpu_texture_t *target, i32 *map) {
+	if (target == NULL) {
+		return;
+	}
+	i32       w   = target->width;
+	i32       h   = target->height;
+	buffer_t *old = gpu_get_texture_pixels(target);
+	i32       bpp = old->length / (w * h);
+	buffer_t *out = buffer_create(old->length);
+	memset(out->buffer, 0, out->length);
+	for (i32 i = 0; i < w * h; ++i) {
+		if (map[i] != -1) {
+			memcpy(out->buffer + (size_t)i * bpp, old->buffer + (size_t)map[i] * bpp, bpp);
+		}
+	}
+	gpu_texture_format_t format = bpp == 16 ? GPU_TEXTURE_FORMAT_RGBA128 : bpp == 8 ? GPU_TEXTURE_FORMAT_RGBA64 : GPU_TEXTURE_FORMAT_RGBA32;
+	gpu_pipeline_t      *pipe   = bpp == 16 ? pipes_copy128 : bpp == 8 ? pipes_copy64 : pipes_copy;
+	gpu_texture_t       *tmp    = gpu_create_texture_from_bytes(out, w, h, format);
+	draw_begin(target, false, 0);
+	draw_set_pipeline(pipe);
+	draw_image(tmp, 0, 0);
+	draw_set_pipeline(NULL);
+	draw_end();
+	gpu_delete_texture(tmp);
+}
+
+static void project_reproject_layers(void *_) {
+	if (_project_old_tris == NULL || g_project->_->layers->length == 0) {
+		return;
+	}
+	f32_array_t *new_tris = project_collect_triangles();
+	gpu_texture_t *first  = g_project->_->layers->buffer[0]->texpaint;
+	i32           *map    = project_reprojection_map(_project_old_tris, new_tris, first->width, first->height);
+	for (i32 i = 0; i < g_project->_->layers->length; ++i) {
+		slot_layer_t *l = g_project->_->layers->buffer[i];
+		if (slot_layer_is_group(l) || l->texpaint == NULL || l->texpaint->width != first->width || l->texpaint->height != first->height) {
+			continue;
+		}
+		project_reproject_texture(l->texpaint, map);
+		if (slot_layer_is_layer(l)) {
+			project_reproject_texture(l->texpaint_nor, map);
+			project_reproject_texture(l->texpaint_pack, map);
+		}
+	}
+	free(map);
+	array_free(new_tris);
+	free(new_tris);
+	array_free(_project_old_tris);
+	free(_project_old_tris);
+	_project_old_tris = NULL;
+	layers_update_fill_layers(); // Fills are regenerated on the new uvs
+	g_context->layers_preview_dirty = true;
+	g_context->ddirty               = 2;
+	console_info(tr("Layers reprojected to the new UVs"));
+}
+
+static void project_reimport_mesh_done() {
+	sys_notify_on_next_frame(&project_reproject_layers, NULL);
+}
+
 void project_reimport_mesh() {
 	if (g_project->mesh_assets != NULL && g_project->mesh_assets->length > 0 && iron_file_exists(g_project->mesh_assets->buffer[0])) {
-		project_import_mesh_box(g_project->mesh_assets->buffer[0], true, false, true, NULL);
+		_project_old_tris = project_collect_triangles(); // Old surface, for reprojecting the layers once the new mesh is in
+		project_import_mesh_box(g_project->mesh_assets->buffer[0], true, false, true, &project_reimport_mesh_done);
 	}
 	else {
 		project_import_asset(NULL, true);
