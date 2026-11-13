@@ -303,6 +303,10 @@ void base_update(void *_) {
 	}
 	mask_glow = glow;
 	if (mouse_released("left") && has_drag) {
+		// The release that ends a drag is not a click on what is under it (an empty mask slot would open its add menu)
+		if (base_is_dragging) {
+			tab_layers_ignore_slot_click = true;
+		}
 		if (base_drag_asset != NULL) {
 
 			// Create image texture

@@ -510,7 +510,7 @@ static void tab_layers_draw_mask_slot(slot_layer_t *l, f32 x, f32 y, f32 size, u
 	}
 	draw_set_color(0xffffffff);
 
-	if (dragging || !hover || !g_ui->enabled || !g_ui->input_enabled || g_ui->combo_selected_id != 0) {
+	if (dragging || !hover || !g_ui->enabled || !g_ui->input_enabled || g_ui->combo_selected_id != 0 || tab_layers_ignore_slot_click) {
 		return;
 	}
 
@@ -1164,6 +1164,7 @@ void tab_layers_draw_slots(bool mini) {
 		slot_layer_t *l = g_project->_->layers->buffer[j];
 		tab_layers_draw_layer_slot(l, j, mini);
 	}
+	tab_layers_ignore_slot_click = false; // Only for the frame a drag ended in
 }
 
 void tab_layers_highlight_odd_lines() {
