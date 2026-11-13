@@ -10,6 +10,7 @@ To-do list of ideas for the app. Add new ones at the bottom of "Open", tick them
 - [ ] Drop an asset onto the brush to paint with it
 - [ ] Delete the hidden Sculpt and Object code for a lighter app
 - [ ] UV reprojection that also handles quads split along a different diagonal
+- [ ] Bake Texture node: bake Bevel on the GPU like the node's other maps, instead of the current CPU bake
 - [x] Blender-like "Bevel" node: a fake bevel on edges, rounding hard edges in the shading (normals) without changing the mesh
 
 ## Done
