@@ -1155,11 +1155,22 @@ static void ui_dock_render_view3d_channel() {
 		current = names->length - 1;
 	}
 
-	i32 w = math_floor(220 * UI_SCALE());
-	i32 h = math_floor(UI_ELEMENT_H() + UI_ELEMENT_OFFSET() * 3); // Room for the combo and its offsets, no scrollbar
-	i32 x = base_appx + math_floor(8 * UI_SCALE());
+	i32 margin = math_floor(8 * UI_SCALE());
+	i32 h      = math_floor(UI_ELEMENT_H() + UI_ELEMENT_OFFSET() + 1); // The combo and the offset after it, so no scrollbar and no empty band
+	// base_appx is already right of a docked tool column. A floating tool column sits inside the view, step past it.
+	i32 x = base_appx + margin;
+	if (context_is_floating_toolbar()) {
+		x += ui_toolbar_x() + ui_toolbar_w(false);
+	}
 	// Below the menubar, which floats in the top left of the view when the header is not pinned
-	i32 y = base_appy + (g_config->header_pinned ? 0 : ui_header_h) + math_floor(8 * UI_SCALE());
+	i32 y = base_appy + (g_config->header_pinned ? 0 : ui_header_h) + margin;
+	// Keep clear of the axis gizmo in the top right corner, shrink on narrow views
+	i32 gizmo_w = math_floor(110 * UI_SCALE());
+	i32 room    = base_appx + dock_view3d_w - gizmo_w - x;
+	i32 w       = math_min(math_floor(220 * UI_SCALE()), room);
+	if (w < math_floor(100 * UI_SCALE())) {
+		return; // View too narrow for the dropdown, the Mode menu still switches channels
+	}
 
 	_ui_dock_channel_x = x;
 	_ui_dock_channel_y = y;
