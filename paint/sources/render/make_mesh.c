@@ -471,29 +471,47 @@ node_shader_context_t *make_mesh_run(material_t *data, i32 layer_pass) {
 					node_shader_write_frag(kong, "metallic = lerp(metallic, texpaint_pack_sample.b, texpaint_opac);");
 				}
 				if (l->paint_height && make_material_height_used) {
+					// The viewport bump comes from the height difference between neighbouring texels (height0 to height3).
+					// Each neighbour gets its own coverage: layer alpha, mask stack and opacity sampled at that neighbour.
+					// Using the coverage of the center texel for all four made a fill layer, whose height is the same everywhere,
+					// show no bump at all, because its shape comes from its masks.
+					char *id = i32_to_string(l->id);
 					if (!l->paint_height_blend) {
 						node_shader_write_frag(kong, "height *= 1.0 - texpaint_opac;");
-						node_shader_write_frag(kong, "height0 *= 1.0 - texpaint_opac;");
-						node_shader_write_frag(kong, "height1 *= 1.0 - texpaint_opac;");
-						node_shader_write_frag(kong, "height2 *= 1.0 - texpaint_opac;");
-						node_shader_write_frag(kong, "height3 *= 1.0 - texpaint_opac;");
 					}
 					node_shader_write_frag(kong, "height += texpaint_pack_sample.a * texpaint_opac;");
 					node_shader_write_frag(kong, "{");
 					node_shader_add_constant(kong, "float2 texpaint_size", "_texpaint_size");
 					node_shader_write_frag(kong, "float tex_step = 1.0 / constants.texpaint_size.x;");
-					node_shader_write_frag(
-					    kong, string_tmp("height0 += sample_lod(texpaint_pack%s, sampler_linear, float2(%s.x - tex_step, %s.y), 0.0).a * texpaint_opac;",
-					                     i32_to_string(l->id), tex_coord, tex_coord));
-					node_shader_write_frag(
-					    kong, string_tmp("height1 += sample_lod(texpaint_pack%s, sampler_linear, float2(%s.x + tex_step, %s.y), 0.0).a * texpaint_opac;",
-					                     i32_to_string(l->id), tex_coord, tex_coord));
-					node_shader_write_frag(
-					    kong, string_tmp("height2 += sample_lod(texpaint_pack%s, sampler_linear, float2(%s.x, %s.y - tex_step), 0.0).a * texpaint_opac;",
-					                     i32_to_string(l->id), tex_coord, tex_coord));
-					node_shader_write_frag(
-					    kong, string_tmp("height3 += sample_lod(texpaint_pack%s, sampler_linear, float2(%s.x, %s.y + tex_step), 0.0).a * texpaint_opac;",
-					                     i32_to_string(l->id), tex_coord, tex_coord));
+
+					bool height_masks = false;
+					for (i32 i = 0; masks != NULL && i < masks->length; ++i) {
+						if (slot_layer_is_visible(masks->buffer[i])) {
+							height_masks = true;
+							break;
+						}
+					}
+					char *offsets[] = {"float2(%s.x - tex_step, %s.y)", "float2(%s.x + tex_step, %s.y)", "float2(%s.x, %s.y - tex_step)",
+					                   "float2(%s.x, %s.y + tex_step)"};
+					for (i32 n = 0; n < 4; ++n) {
+						char *coord = string_tmp("height_coord%d", n);
+						char *opac  = string_tmp("height_opac%d", n);
+						node_shader_write_frag(kong, string_tmp("float2 %s = %s;", coord, string_tmp(offsets[n], tex_coord, tex_coord)));
+						node_shader_write_frag(kong, string_tmp("float %s = sample_lod(texpaint%s, sampler_linear, %s, 0.0).a;", opac, id, coord));
+						if (height_masks) {
+							char *mask = string_tmp("height_mask%d", n);
+							node_shader_write_frag(kong, string_tmp("float %s = 1.0;", mask));
+							make_mesh_write_mask_stacks(kong, masks, mask, "texpaint", coord, string_tmp("%sh%d", id, n));
+							node_shader_write_frag(kong, string_tmp("%s *= clamp(%s, 0.0, 1.0);", opac, mask));
+						}
+						if (slot_layer_get_opacity(l) < 1) {
+							node_shader_write_frag(kong, string_tmp("%s *= float(%s);", opac, f32_to_string(slot_layer_get_opacity(l))));
+						}
+						if (!l->paint_height_blend) {
+							node_shader_write_frag(kong, string_tmp("height%d *= 1.0 - %s;", n, opac));
+						}
+						node_shader_write_frag(kong, string_tmp("height%d += sample_lod(texpaint_pack%s, sampler_linear, %s, 0.0).a * %s;", n, id, coord, opac));
+					}
 					node_shader_write_frag(kong, "}");
 				}
 			}
@@ -551,7 +569,8 @@ node_shader_context_t *make_mesh_run(material_t *data, i32 layer_pass) {
 		}
 
 		if (make_material_height_used) {
-			node_shader_write_frag(kong, "if (height > 0.0) {");
+			// Also just outside a raised area, so its edge is drawn on both sides
+			node_shader_write_frag(kong, "if (height > 0.0 || height0 + height1 + height2 + height3 > 0.0) {");
 			node_shader_write_frag(kong, "float height_dx = height0 - height1;");
 			node_shader_write_frag(kong, "float height_dy = height2 - height3;");
 			// Whiteout blend
