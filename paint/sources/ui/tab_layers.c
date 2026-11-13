@@ -376,8 +376,22 @@ bool tab_layers_has_children(slot_layer_t *l) {
 // Mask slot of a layer or group row: thumbnail of its combined mask stack, empty frame without masks.
 // Clicking it opens the stack and selects the top mask, or offers to add the first mask.
 // While a material is dragged every slot lights up, dropping the material on a slot adds it as a fill mask.
+// The thing being dragged can go into a mask stack: an asset from the shelf, a project texture, or an image file from the browser
+bool tab_layers_drag_fits_mask() {
+	if (base_drag_material != NULL) {
+		return true;
+	}
+	if (base_drag_asset != NULL) {
+		return base_drag_asset->file == NULL || !path_has_ext(base_drag_asset->file, "hdr");
+	}
+	if (base_drag_file != NULL) {
+		return path_is_texture(base_drag_file) && !path_has_ext(base_drag_file, "hdr");
+	}
+	return false;
+}
+
 static void tab_layers_draw_mask_slot(slot_layer_t *l, f32 x, f32 y, f32 size) {
-	bool dragging = base_is_dragging && base_drag_material != NULL;
+	bool dragging = base_is_dragging && tab_layers_drag_fits_mask();
 	bool hover    = mouse_x > g_ui->_window_x + x && mouse_x < g_ui->_window_x + x + size && mouse_y > g_ui->_window_y + y &&
 	                mouse_y < g_ui->_window_y + y + size;
 
@@ -394,18 +408,26 @@ static void tab_layers_draw_mask_slot(slot_layer_t *l, f32 x, f32 y, f32 size) {
 	g_ui->_y = _y;
 	g_ui->_w = _w;
 
-	// Frame
+	// Frame. While something that fits a mask stack is dragged, every mask slot glows a soft orange, the one under the mouse brighter.
 	if (dragging) {
+		u32 glow = 0x00f2a65a; // Soft orange
 		if (hover) {
-			draw_set_color((g_theme->HIGHLIGHT_COL & 0x00ffffff) | 0x66000000);
+			draw_set_color(glow | 0x2e000000);
 			draw_filled_rect(x, y, size, size);
 			tab_layers_drop_mask_layer = l;
 		}
 		else if (tab_layers_drop_mask_layer == l) {
 			tab_layers_drop_mask_layer = NULL;
 		}
-		draw_set_color(g_theme->HIGHLIGHT_COL);
-		draw_rect(x - 1, y - 1, size + 2, size + 2, 2 * UI_SCALE());
+		// Halo fading outwards
+		u32 halo[3] = {hover ? 0x60 : 0x34, hover ? 0x30 : 0x1a, hover ? 0x14 : 0x0a};
+		for (i32 k = 0; k < 3; ++k) {
+			f32 o = (k + 1) * 2 * UI_SCALE();
+			draw_set_color(glow | (halo[k] << 24));
+			draw_rect(x - o, y - o, size + o * 2, size + o * 2, 2 * UI_SCALE());
+		}
+		draw_set_color(glow | (hover ? 0xff000000 : 0xb0000000));
+		draw_rect(x, y, size, size, 1.5 * UI_SCALE());
 	}
 	else {
 		draw_set_color(hover ? g_theme->LABEL_COL : g_theme->SEPARATOR_COL);
@@ -1056,7 +1078,7 @@ void tab_layers_draw_layer_slot(slot_layer_t *l, i32 i, bool mini) {
 }
 
 void tab_layers_draw_slots(bool mini) {
-	if (!base_is_dragging || base_drag_material == NULL || mini) {
+	if (!base_is_dragging || !tab_layers_drag_fits_mask() || mini) {
 		tab_layers_drop_mask_layer = NULL;
 	}
 	for (i32 i = 0; i < g_project->_->layers->length; ++i) {
@@ -1249,6 +1271,26 @@ void tab_layers_drop_material_as_mask(slot_layer_t *l, slot_material_t *m) {
 	_tab_layers_drop_mask_layer  = l;
 	_tab_layers_drop_mask_source = m;
 	sys_notify_on_next_frame(&tab_layers_drop_material_as_mask_next_frame, NULL);
+}
+
+static i32 _tab_layers_drop_mask_asset = -1;
+
+static void tab_layers_drop_asset_as_mask_next_frame(void *_) {
+	slot_layer_t *l = _tab_layers_drop_mask_layer;
+	if (l == NULL || array_index_of(g_project->_->layers, l) < 0 || _tab_layers_drop_mask_asset < 0 ||
+	    _tab_layers_drop_mask_asset >= g_project->_->assets->length) {
+		return;
+	}
+	context_set_layer(l);
+	_tab_layers_mask_asset = _tab_layers_drop_mask_asset;
+	tab_layers_new_mask(4); // Image: black and white fill driven by the texture
+}
+
+// A project texture dropped onto the mask slot of a layer or group becomes an Image mask on top of its mask stack
+void tab_layers_drop_asset_as_mask(slot_layer_t *l, i32 asset_index) {
+	_tab_layers_drop_mask_layer = l;
+	_tab_layers_drop_mask_asset = asset_index;
+	sys_notify_on_next_frame(&tab_layers_drop_asset_as_mask_next_frame, NULL);
 }
 
 void tab_layers_button_new_menu() {

@@ -406,6 +406,8 @@ void                   context_set_viewport_shader(void *viewport_shader);
 void                   context_set_viewport_texture(gpu_texture_t *image);
 gpu_texture_t         *context_baked_map(viewport_mode_t mode);
 bool                   ui_dock_view3d_channel_hovered();
+bool                   tab_layers_drag_fits_mask();
+void                   tab_layers_drop_asset_as_mask(slot_layer_t *l, i32 asset_index);
 char                  *ui_menubar_viewport_mode_to_string(viewport_mode_t m);
 void                   context_set_camera_controls(int i);
 void                   context_set_render_path();

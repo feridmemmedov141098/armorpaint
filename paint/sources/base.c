@@ -309,6 +309,11 @@ void base_update(void *_) {
 					util_stencil_view_image_open(base_drag_asset, (mouse_x - base_view_x(0)) / (f32)base_view_w(), (mouse_y - base_appy) / (f32)base_h());
 				}
 			}
+			// Dropped on a mask slot: Image entry on top of that mask stack
+			else if (context_in_layers() && tab_layers_drop_mask_layer != NULL && array_index_of(g_project->_->layers, tab_layers_drop_mask_layer) >= 0) {
+				tab_layers_drop_asset_as_mask(tab_layers_drop_mask_layer, array_index_of(g_project->_->assets, base_drag_asset));
+				tab_layers_drop_mask_layer = NULL;
+			}
 			// Create mask
 			else if (context_in_layers() || context_in_2d_view(VIEW_2D_TYPE_LAYER)) {
 				layers_create_image_mask(base_drag_asset);
@@ -343,7 +348,24 @@ void base_update(void *_) {
 			base_drag_swatch = NULL;
 		}
 		else if (base_drag_file != NULL) {
-			if (!context_in_browser()) {
+			// An image file dropped on a mask slot is imported as a project texture and added as an Image mask
+			bool on_mask_slot = context_in_layers() && tab_layers_drop_mask_layer != NULL &&
+			                    array_index_of(g_project->_->layers, tab_layers_drop_mask_layer) >= 0 && tab_layers_drag_fits_mask();
+			if (on_mask_slot) {
+				import_texture_run(base_drag_file, false); // Synchronous, an already imported file is kept as it is
+				i32 asset_index = -1;
+				for (i32 i = 0; i < g_project->_->assets->length; ++i) {
+					if (string_equals(g_project->_->assets->buffer[i]->file, base_drag_file)) {
+						asset_index = i;
+						break;
+					}
+				}
+				if (asset_index >= 0) {
+					tab_layers_drop_asset_as_mask(tab_layers_drop_mask_layer, asset_index);
+				}
+				tab_layers_drop_mask_layer = NULL;
+			}
+			else if (!context_in_browser()) {
 				base_drop_x = mouse_x;
 				base_drop_y = mouse_y;
 
