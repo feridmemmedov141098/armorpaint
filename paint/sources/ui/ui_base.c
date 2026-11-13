@@ -251,6 +251,14 @@ void ui_base_init_tabs() {
 	_draw_callback_create(tab_view2d_draw, TAB_VIEW2D, "2D View", -1)->closed_default = true;
 	_draw_callback_create(tab_nodes_draw, TAB_NODES, "Nodes", -1)->closed_default     = true;
 
+	// Texturing workspace: tabs for authoring and scripting start closed, they open from the arrow at the end of a tab strip
+	ui_base_all_tabs[TAB_SCRIPTS]->closed_default  = true;
+	ui_base_all_tabs[TAB_PLUGINS]->closed_default  = true;
+	ui_base_all_tabs[TAB_FONTS]->closed_default    = true;
+	ui_base_all_tabs[TAB_SOUNDS]->closed_default   = true;
+	ui_base_all_tabs[TAB_TIMELINE]->closed_default = true;
+	ui_base_all_tabs[TAB_CONSOLE]->closed_default  = true;
+
 #ifdef IRON_IOS
 	if (config_is_iphone()) {
 		ui_base_all_tabs[TAB_TIMELINE]->closed_default = true;
