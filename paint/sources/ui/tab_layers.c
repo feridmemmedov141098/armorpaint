@@ -96,18 +96,17 @@ ui_state_t tab_layers_draw_layer_icon(slot_layer_t *l, i32 i, f32 uix, f32 uiy, 
 	if (!slot_layer_is_group(l)) {
 		gpu_texture_t *texpaint_preview = l->texpaint_preview;
 
+		// One rule for every layer: the thumbnail shows the content of the layer.
+		// A fill shows what it fills with, not a sphere preview of its material.
 		gpu_texture_t *icon;
-		if (l->fill_material != NULL) {
-			icon = g_config->window_scale > 1 ? l->fill_material->image : l->fill_material->image_icon;
-		}
-		else if (l->path_material != NULL) {
+		if (l->path_material != NULL) {
 			icon = g_config->window_scale > 1 ? l->path_material->image : l->path_material->image_icon;
 		}
 		else {
 			icon = texpaint_preview;
 		}
 
-		if (l->fill_material == NULL && l->path_material == NULL) {
+		if (l->path_material == NULL) {
 			// Checker
 			rect_t *r  = resource_tile50(icons, ICON_CHECKER);
 			f32     _x = g_ui->_x;
@@ -118,14 +117,14 @@ ui_state_t tab_layers_draw_layer_icon(slot_layer_t *l, i32 i, f32 uix, f32 uiy, 
 			g_ui->_y = _y;
 			g_ui->_w = _w;
 		}
-		if (l->fill_material == NULL && slot_layer_is_mask(l)) {
+		if (slot_layer_is_mask(l)) {
 			draw_set_pipeline(ui_view2d_pipe);
 			gpu_set_int(ui_view2d_channel_loc, 1);
 		}
 
 		ui_state_t state = ui_image(icon, 0xffffffff, icon_h);
 
-		if (l->fill_material == NULL && slot_layer_is_mask(l)) {
+		if (slot_layer_is_mask(l)) {
 			draw_set_pipeline(NULL);
 		}
 
