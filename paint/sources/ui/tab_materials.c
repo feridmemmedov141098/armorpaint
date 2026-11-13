@@ -241,7 +241,7 @@ void tab_materials_draw_slots(bool mini) {
 	i32_array_t *vis       = i32_array_create(g_project->_->materials->length + 1);
 	i32          vis_count = 0;
 	for (i32 i = 0; i < g_project->_->materials->length; ++i) {
-		if (!slot_material_is_layer_owned(g_project->_->materials->buffer[i])) {
+		if (!slot_material_is_hidden(g_project->_->materials->buffer[i])) {
 			vis->buffer[vis_count++] = i;
 		}
 	}
@@ -430,7 +430,7 @@ void tab_materials_button_new(char *text) {
 }
 
 void tab_materials_draw_mini(i32 *htab) {
-	ui_set_hovered_tab_name(tr("Materials"));
+	ui_set_hovered_tab_name(tr("Assets"));
 
 	ui_begin_sticky();
 	ui_separator(5, true);
@@ -450,7 +450,7 @@ void tab_materials_draw_edit() {
 }
 
 void tab_materials_draw_full(i32 *htab) {
-	if (ui_tab(htab, tr("Materials"), false, -1, false)) {
+	if (ui_tab(htab, tr("Assets"), false, -1, false)) {
 		ui_begin_sticky();
 		f32_array_t *row = f32_array_create_from_raw_tmp(
 		    (f32[]){
@@ -469,8 +469,7 @@ void tab_materials_draw_full(i32 *htab) {
 
 		ui_end_sticky();
 		ui_separator(3, false);
-		tab_materials_draw_slots(false);
-		ui_node_params_draw(CANVAS_TYPE_MATERIAL, &g_config->material_params);
+		tab_materials_draw_slots(false); // Parameters of the picked asset are in the properties tab
 	}
 }
 

@@ -121,6 +121,13 @@ void tab_properties_draw(i32 *htab) {
 	tab_properties_draw_opacity(l);
 
 	if (l->fill_material == NULL) {
+		if (slot_layer_is_group(l) || slot_layer_is_filter(l)) {
+			return;
+		}
+		// What the brush puts down on this layer: its own color, roughness, metallic and height, or an asset picked from the shelf
+		slot_material_t *m = g_context->material;
+		ui_text(slot_material_is_hidden(m) ? tr("Brush") : string_tmp("%s - %s", tr("Brush"), m->canvas->name), UI_ALIGN_LEFT, 0x00000000);
+		ui_node_params_draw(CANVAS_TYPE_MATERIAL, &g_config->material_params);
 		return;
 	}
 

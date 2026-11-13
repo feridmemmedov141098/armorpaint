@@ -97,6 +97,41 @@ slot_material_t *slot_material_create(shader_data_t *m, ui_node_canvas_t *c) {
 	return raw;
 }
 
+// Materials that belong to a layer ("layer:" + id) or to the brush ("brush:paint") are edited in the properties, not listed as assets
+bool slot_material_is_hidden(slot_material_t *m) {
+	return m != NULL && m->canvas != NULL && (starts_with(m->canvas->name, "layer:") || starts_with(m->canvas->name, "brush:"));
+}
+
+// The material the brush paints with: its own color, roughness, metallic and height.
+// Paint layers and paint masks each have one, a mask is painted in white until the color is changed.
+// Created on first use and saved with the project.
+slot_material_t *slot_material_brush(bool mask) {
+	char *name = mask ? "brush:mask" : "brush:paint";
+	for (i32 i = 0; i < g_project->_->materials->length; ++i) {
+		slot_material_t *m = g_project->_->materials->buffer[i];
+		if (string_equals(m->canvas->name, name)) {
+			return m;
+		}
+	}
+	if (g_project->_->materials->length == 0) {
+		return NULL;
+	}
+	slot_material_t *m = slot_material_create(g_project->_->materials->buffer[0]->data, NULL);
+	m->canvas->name    = name;
+	if (mask) {
+		for (i32 i = 0; i < m->canvas->nodes->length; ++i) {
+			ui_node_t *n = m->canvas->nodes->buffer[i];
+			if (string_equals(n->type, "RGB") && n->outputs->length > 0 && n->outputs->buffer[0]->default_value->length >= 3) {
+				n->outputs->buffer[0]->default_value->buffer[0] = 1.0;
+				n->outputs->buffer[0]->default_value->buffer[1] = 1.0;
+				n->outputs->buffer[0]->default_value->buffer[2] = 1.0;
+			}
+		}
+	}
+	any_array_push(g_project->_->materials, m);
+	return m;
+}
+
 void slot_material_unload(slot_material_t *raw) {
 	gpu_delete_texture(raw->image);
 	gpu_delete_texture(raw->image_icon);

@@ -327,6 +327,7 @@ void ui_dock_reset() {
 	dock_node_t *nodes = dock_leaf_create();
 	dock_default_leaf(nodes, TAB_NODES);
 	dock_node_t *status = dock_leaf_create();
+	dock_default_leaf(status, TAB_MATERIALS); // Assets shelf
 	dock_default_leaf(status, TAB_BROWSER);
 	dock_default_leaf(status, TAB_TEXTURES);
 	dock_default_leaf(status, TAB_FONTS);
@@ -341,7 +342,6 @@ void ui_dock_reset() {
 	dock_default_leaf(sidebar0, TAB_DEBUG);
 	dock_node_t *sidebar1 = dock_leaf_create();
 	dock_default_leaf(sidebar1, TAB_PROPERTIES);
-	dock_default_leaf(sidebar1, TAB_MATERIALS);
 	dock_default_leaf(sidebar1, TAB_BRUSHES);
 	dock_default_leaf(sidebar1, TAB_PLUGINS);
 

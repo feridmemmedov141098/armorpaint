@@ -168,6 +168,7 @@ void ui_base_update(void *_) {
 		util_layer_check_path_grab();
 		util_brush_update();
 		util_layer_update_preview();
+		context_sync_layer_material();
 		util_shortcut_undo_redo();
 		util_shortcut_global();
 		util_shortcut_brush();
@@ -232,7 +233,7 @@ void ui_base_init_tabs() {
 	_draw_callback_create(tab_meshes_draw, TAB_MESHES, "Meshes", TAB_AREA_SIDEBAR0);
 	_draw_callback_create(tab_scripts_draw, TAB_SCRIPTS, "Scripts", TAB_AREA_SIDEBAR0);
 	_draw_callback_create(tab_properties_draw, TAB_PROPERTIES, "Properties", TAB_AREA_SIDEBAR1);
-	_draw_callback_create(tab_materials_draw, TAB_MATERIALS, "Materials", TAB_AREA_SIDEBAR1);
+	_draw_callback_create(tab_materials_draw, TAB_MATERIALS, "Assets", TAB_AREA_STATUS); // Shelf to drag from
 	_draw_callback_create(tab_brushes_draw, TAB_BRUSHES, "Brushes", TAB_AREA_SIDEBAR1);
 	_draw_callback_create(tab_plugins_draw, TAB_PLUGINS, "Plugins", TAB_AREA_SIDEBAR1);
 	_draw_callback_create(tab_browser_draw, TAB_BROWSER, "Browser", TAB_AREA_STATUS);

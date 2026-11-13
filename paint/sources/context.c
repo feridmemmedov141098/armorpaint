@@ -202,7 +202,8 @@ void context_set_material(slot_material_t *m) {
 	if (array_index_of(g_project->_->materials, m) == -1) {
 		return;
 	}
-	g_context->material = m;
+	g_context->material     = m;
+	context_material_pinned = !slot_material_is_hidden(m); // An asset picked on purpose is the brush source
 	make_material_parse_paint_material(true);
 	ui_dock_redraw(TAB_AREA_SIDEBAR1);
 	ui_header_handle->redraws = 2;
@@ -275,7 +276,35 @@ void context_select_layer(i32 i) {
 	context_set_layer(g_project->_->layers->buffer[i]);
 }
 
+// The active material follows the selected layer: a fill is edited through the material of its layer,
+// a paint layer or paint mask is painted with the brush material.
+// Picking an asset on purpose pins it as the brush source until a layer is selected again.
+void context_sync_layer_material() {
+	slot_layer_t *l = g_context->layer;
+	if (l == NULL || context_material_pinned || base_drag_material != NULL || g_project->_->materials->length == 0 ||
+	    array_index_of(g_project->_->layers, l) < 0) {
+		return;
+	}
+	slot_material_t *want = l->fill_material != NULL ? l->fill_material : l->path_material != NULL ? l->path_material : NULL;
+	if (want == NULL && !slot_layer_is_group(l)) {
+		gpu_texture_t *current = _draw_current;
+		bool           in_use  = gpu_in_use;
+		if (in_use) {
+			draw_end();
+		}
+		want = slot_material_brush(slot_layer_is_mask(l));
+		if (in_use) {
+			draw_begin(current, false, 0);
+		}
+	}
+	if (want != NULL && g_context->material != want) {
+		context_set_material(want);
+		context_material_pinned = false;
+	}
+}
+
 void context_set_layer(slot_layer_t *l) {
+	context_material_pinned = false; // Back to the material of the layer or of the brush
 	if (l == g_context->layer) {
 		return;
 	}
@@ -371,7 +400,7 @@ bool context_in_layers() {
 
 bool context_in_materials() {
 	char *tab = ui_hovered_tab_name();
-	return string_equals(tab, tr("Materials"));
+	return string_equals(tab, tr("Assets"));
 }
 
 bool context_in_meshes() {
