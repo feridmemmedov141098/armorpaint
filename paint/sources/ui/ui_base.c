@@ -235,7 +235,7 @@ void ui_base_init_tabs() {
 	_draw_callback_create(tab_properties_draw, TAB_PROPERTIES, "Properties", TAB_AREA_SIDEBAR1);
 	_draw_callback_create(tab_materials_draw, TAB_MATERIALS, "Assets", TAB_AREA_STATUS); // Shelf to drag from
 	_draw_callback_create(tab_brushes_draw, TAB_BRUSHES, "Brushes", TAB_AREA_SIDEBAR1);
-	_draw_callback_create(tab_plugins_draw, TAB_PLUGINS, "Plugins", TAB_AREA_SIDEBAR1);
+	_draw_callback_create(tab_plugins_draw, TAB_PLUGINS, "Bake", TAB_AREA_SIDEBAR1); // Bake Mesh Maps panel
 	_draw_callback_create(tab_browser_draw, TAB_BROWSER, "Browser", TAB_AREA_STATUS);
 	_draw_callback_create(tab_textures_draw, TAB_TEXTURES, "Textures", TAB_AREA_STATUS);
 	_draw_callback_create(tab_fonts_draw, TAB_FONTS, "Fonts", TAB_AREA_STATUS);

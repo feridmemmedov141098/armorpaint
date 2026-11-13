@@ -299,6 +299,12 @@ config_t *config_create_default() {
 	return c;
 }
 
+// Plugins are not user managed: the built-in Bake Mesh Maps plugin always runs, nothing else does,
+// whatever an older config.json had enabled
+void config_set_builtin_plugins() {
+	g_config->plugins = any_array_create_from_raw((void *[]){string_copy("bake_maps.c")}, 1);
+}
+
 void config_init() {
 	if (!config_loaded || g_config == NULL) {
 		g_config = config_create_default();
@@ -308,6 +314,7 @@ void config_init() {
 	}
 	// Paint is the only tool mode, a config saved in Sculpt or Object mode starts in Paint
 	g_config->tools = TOOLS_PAINT;
+	config_set_builtin_plugins();
 
 	ui_touch_control = g_config->touch_ui;
 	ui_tooltips      = g_config->tooltips;
@@ -526,6 +533,7 @@ void config_import_from(config_t *from) {
 	g_config->sha     = string_copy(_sha);
 	g_config->version = string_copy(_version);
 	g_config->tools   = TOOLS_PAINT; // Paint is the only tool mode
+	config_set_builtin_plugins();
 	keymap_load();
 	base_set_workspace(WORKSPACE_PRESET_NONE);
 	translator_load_translations(g_config->locale);

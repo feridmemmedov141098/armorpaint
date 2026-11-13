@@ -1153,9 +1153,7 @@ void box_preferences_show_box() {
 	if (ui_tab(&box_preferences_tab, tr("Cloud"), true, -1, false)) {
 		box_preferences_cloud_tab();
 	}
-	if (ui_tab(&box_preferences_tab, tr("Plugins"), true, -1, false)) {
-		box_preferences_plugins_tab();
-	}
+	// No Plugins page: plugins are not user managed, see config_set_builtin_plugins()
 }
 
 void box_preferences_show() {

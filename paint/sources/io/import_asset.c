@@ -74,7 +74,8 @@ void import_asset_run(char *path, f32 drop_x, f32 drop_y, bool show_box, bool hd
 		import_arm_run_project(path);
 	}
 	else if (path_is_plugin(path)) {
-		import_plugin_run(path);
+		// Plugins are not user managed, a dropped or imported plugin file is not installed
+		console_error(tr("Plugins can not be installed"));
 	}
 	else if (path_is_font(path)) {
 		import_font_run(path);
