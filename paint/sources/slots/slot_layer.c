@@ -172,6 +172,10 @@ void slot_layer_delete(slot_layer_t *raw) {
 }
 
 void slot_layer_unload(slot_layer_t *raw) {
+	if (raw->mask_slot_preview != NULL) {
+		gpu_delete_texture(raw->mask_slot_preview);
+		raw->mask_slot_preview = NULL;
+	}
 	if (slot_layer_is_group(raw)) {
 		if (raw->texpaint_preview != NULL) {
 			gpu_delete_texture(raw->texpaint_preview);

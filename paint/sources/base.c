@@ -74,6 +74,14 @@ void base_material_dropped_export(char *path) {
 }
 
 void base_material_dropped() {
+	// Dropped onto the mask slot of a layer or group, the material becomes a mask on top of its mask stack
+	if (context_in_layers() && tab_layers_drop_mask_layer != NULL && array_index_of(g_project->_->layers, tab_layers_drop_mask_layer) >= 0) {
+		tab_layers_drop_material_as_mask(tab_layers_drop_mask_layer, base_drag_material);
+		tab_layers_drop_mask_layer = NULL;
+		base_drag_material         = NULL;
+		return;
+	}
+
 	// Material drag and dropped onto viewport or layers tab
 	if (context_in_3d_view()) {
 		uv_type_t uv_type   = keyboard_down("control") ? UV_TYPE_PROJECT : UV_TYPE_UVMAP;

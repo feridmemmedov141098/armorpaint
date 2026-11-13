@@ -437,6 +437,29 @@ node_shader_context_t *make_paint_run_context(material_t *data, char *context_id
 		char *opac                         = sout->out_opacity;
 		char *emis                         = sout->out_emission;
 		char *subs                         = sout->out_subsurface;
+
+		// A mask only takes one black and white signal from the material.
+		// When the material drives its opacity with a pattern (edge wear and other overlays), that pattern is the mask,
+		// otherwise the base color is, see the red only color writes below.
+		if (slot_layer_is_mask(g_context->layer) && g_context->layer->fill_material != NULL) {
+			ui_node_canvas_t *canvas = g_context->material->canvas;
+			for (i32 i = 0; i < canvas->nodes->length; ++i) {
+				ui_node_t *n = canvas->nodes->buffer[i];
+				if (!string_equals(n->type, "OUTPUT_MATERIAL_PBR")) {
+					continue;
+				}
+				for (i32 j = 0; j < canvas->links->length; ++j) {
+					ui_node_link_t *link = canvas->links->buffer[j];
+					if (link->to_id == n->id && link->to_socket == 1) { // Opacity
+						base = string_tmp("float3(%s, %s, %s)", opac, opac, opac);
+						opac = "1.0";
+						break;
+					}
+				}
+				break;
+			}
+		}
+
 		node_shader_write_frag(kong, string_tmp("float3 basecol = %s;", base));
 		node_shader_write_frag(kong, string_tmp("float roughness = %s;", rough));
 		node_shader_write_frag(kong, string_tmp("float metallic = %s;", met));

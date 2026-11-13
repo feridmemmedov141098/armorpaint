@@ -45,7 +45,53 @@ static void util_layer_draw_preview(slot_layer_t *l, gpu_texture_t *target) {
 	draw_end();
 }
 
+// Thumbnail of the combined mask stack shown in the mask slot of a layer or group row
+static void util_layer_update_mask_slot(slot_layer_t *l) {
+	if (l == NULL || slot_layer_is_mask(l) || slot_layer_is_filter(l)) {
+		return;
+	}
+	gpu_texture_t *combined = layers_flatten_masks(l, false);
+	if (combined == NULL) {
+		if (l->mask_slot_preview != NULL) {
+			gpu_delete_texture(l->mask_slot_preview);
+			l->mask_slot_preview = NULL;
+		}
+		return;
+	}
+	if (l->mask_slot_preview == NULL) {
+		l->mask_slot_preview = gpu_create_render_target(util_render_layer_preview_size, util_render_layer_preview_size, GPU_TEXTURE_FORMAT_RGBA32);
+	}
+	draw_begin(l->mask_slot_preview, true, 0xff000000);
+	draw_set_pipeline(pipes_copy);
+	draw_scaled_image(combined, 0, 0, l->mask_slot_preview->width, l->mask_slot_preview->height);
+	draw_set_pipeline(NULL);
+	draw_end();
+}
+
+static slot_layer_t *util_layer_mask_slot_pending = NULL;
+
+// The mask stack that l owns or belongs to changed without repainting, redraw its slot thumbnail
+void util_layer_mask_slot_changed(slot_layer_t *l) {
+	if (l == NULL) {
+		return;
+	}
+	slot_layer_t *owner = slot_layer_is_mask(l) ? l->parent : l;
+	if (util_layer_mask_slot_pending != NULL && util_layer_mask_slot_pending != owner) {
+		g_context->layers_preview_dirty = true; // More than one stack changed this frame
+	}
+	util_layer_mask_slot_pending = owner;
+}
+
 void util_layer_update_preview() {
+	if (util_layer_mask_slot_pending != NULL) {
+		slot_layer_t *owner          = util_layer_mask_slot_pending;
+		util_layer_mask_slot_pending = NULL;
+		if (!g_context->layers_preview_dirty && array_index_of(g_project->_->layers, owner) >= 0) {
+			util_layer_update_mask_slot(owner);
+			ui_dock_redraw(TAB_AREA_SIDEBAR0);
+		}
+	}
+
 	if (g_context->layers_preview_dirty) {
 		g_context->layers_preview_dirty = false;
 		g_context->layer_preview_dirty  = false;
@@ -53,6 +99,7 @@ void util_layer_update_preview() {
 		// Update all layer previews
 		for (i32 i = 0; i < g_project->_->layers->length; ++i) {
 			slot_layer_t *l = g_project->_->layers->buffer[i];
+			util_layer_update_mask_slot(l);
 			if (slot_layer_is_group(l)) {
 				continue;
 			}
@@ -77,6 +124,8 @@ void util_layer_update_preview() {
 			util_layer_draw_preview(l, target);
 			ui_dock_redraw(TAB_AREA_SIDEBAR0);
 		}
+		// A changed mask changes the stack of its layer or group
+		util_layer_update_mask_slot(slot_layer_is_mask(l) ? l->parent : l);
 	}
 }
 

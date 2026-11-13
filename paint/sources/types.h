@@ -88,6 +88,7 @@ typedef struct slot_layer {
 	bool                  path_curved;
 	bool                  path_text;
 	struct slot_material *path_material;
+	struct gpu_texture   *mask_slot_preview; // Combined mask stack of a layer or group, null without masks
 } slot_layer_t;
 
 typedef struct slot_font {

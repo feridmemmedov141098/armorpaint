@@ -377,6 +377,7 @@ i32             ui_box_modalh         = 170;
 char           *tab_layers_layer_name = "";
 char           *tab_meshes_mesh_name  = "";
 slot_layer_t   *tab_layers_l;
+slot_layer_t   *tab_layers_drop_mask_layer = NULL; // Layer or group whose mask slot is under a dragged material
 paint_tex_t     tab_layers_preview_tex           = PAINT_TEX_BASE;
 gpu_texture_t  *util_uv_uvmap                    = NULL;
 bool            util_uv_uvmap_cached             = false;

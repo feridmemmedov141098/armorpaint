@@ -50,6 +50,10 @@ bool                  slot_layer_has_masks(slot_layer_t *raw, bool include_group
 i32                   slot_layer_get_mask_blending(slot_layer_t *raw);
 bool                  slot_layer_mask_stack_is_multiply(slot_layer_t *owner);
 gpu_texture_t        *layers_flatten_masks(slot_layer_t *l, bool include_group_masks);
+void                  util_layer_mask_slot_changed(slot_layer_t *l);
+void                  tab_layers_drop_material_as_mask(slot_layer_t *l, slot_material_t *m);
+void                  tab_layers_mask_slot_menu_draw(void);
+void                  tab_layers_new_mask(i32 type);
 bool                  slot_layer_has_visible_filter(slot_layer_t *raw);
 slot_layer_t_array_t *slot_layer_get_filters(slot_layer_t *raw, bool include_group_filters);
 f32                   slot_layer_get_opacity(slot_layer_t *raw);
