@@ -477,6 +477,13 @@ char *config_get_date() {
 }
 
 iron_window_options_t *config_get_options() {
+	// Recover from a rect saved while the window was minimized
+	if (g_config->window_w <= 0 || g_config->window_h <= 0) {
+		g_config->window_w = 1720;
+		g_config->window_h = 960;
+		g_config->window_x = -1;
+		g_config->window_y = -1;
+	}
 	iron_window_mode_t     window_mode = g_config->window_mode == 0 ? IRON_WINDOW_MODE_WINDOW : IRON_WINDOW_MODE_FULLSCREEN;
 	iron_window_features_t features    = IRON_WINDOW_FEATURES_NONE;
 	if (g_config->window_resizable) {

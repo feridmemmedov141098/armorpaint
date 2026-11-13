@@ -42,10 +42,16 @@ void base_init_on_start_arm(void *_) {
 }
 
 void base_save_window_rect() {
-	g_config->window_w = iron_window_width();
-	g_config->window_h = iron_window_height();
-	g_config->window_x = iron_window_x();
-	g_config->window_y = iron_window_y();
+	i32 w = iron_window_width();
+	i32 h = iron_window_height();
+	// A minimized window reports an empty client area and an off-screen position,
+	// keep the last valid rect instead so the window does not reopen out of view
+	if (w > 0 && h > 0) {
+		g_config->window_w = w;
+		g_config->window_h = h;
+		g_config->window_x = iron_window_x();
+		g_config->window_y = iron_window_y();
+	}
 	config_save();
 }
 
