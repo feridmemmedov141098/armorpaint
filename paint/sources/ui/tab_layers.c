@@ -413,13 +413,14 @@ static void tab_layers_draw_mask_slot(slot_layer_t *l, f32 x, f32 y, f32 size) {
 	}
 
 	slot_layer_t_array_t *masks = slot_layer_get_masks(l, false);
-	ui_tooltip(masks != NULL ? tr("Mask stack") : tr("Add mask"));
-	if (!g_ui->input_released) {
-		return;
-	}
-	if (masks == NULL) {
+	ui_tooltip(masks != NULL ? tr("Mask stack - right click to add to it") : tr("Add mask"));
+	// Right click adds to the stack, so does a click on an empty slot
+	if (g_ui->input_released_r || (g_ui->input_released && masks == NULL)) {
 		context_set_layer(l);
 		ui_menu_draw(&tab_layers_mask_slot_menu_draw, -1, -1);
+		return;
+	}
+	if (!g_ui->input_released) {
 		return;
 	}
 	// Open the stack on the top mask, a second click closes it. Closing a group would hide its layers, it stays open.
@@ -1112,22 +1113,61 @@ void tab_layers_button_new_sculpt_layer(void *_) {
 	sculpt_layers_create_sculpt_layer();
 }
 
-// Adds a mask on top of the mask stack of the selected layer or group.
-// type: 0 black, 1 white, 2 fill with the active material
+static slot_material_t *_tab_layers_mask_source = NULL; // Asset the next fill mask copies, a blank fill when null
+static i32              _tab_layers_mask_asset  = -1;   // Texture of the next blank fill mask, index in the project assets
+
+// Fills a new mask through its own material: a copy of the picked asset, or a black and white fill
+// that starts white and is edited in the properties, optionally driven by a texture
+static void tab_layers_new_fill_mask_next_frame(slot_layer_t *m) {
+	slot_material_t *source = _tab_layers_mask_source;
+	i32              asset  = _tab_layers_mask_asset;
+	_tab_layers_mask_source = NULL;
+	_tab_layers_mask_asset  = -1;
+	if (array_index_of(g_project->_->layers, m) < 0) {
+		return;
+	}
+	if (source != NULL && array_index_of(g_project->_->materials, source) < 0) {
+		source = NULL;
+	}
+	context_set_layer(m);
+	slot_material_t *own = slot_layer_make_owned_material(m, source);
+	if (source == NULL) {
+		slot_material_set_base_white(own);
+		if (asset >= 0) {
+			slot_material_set_base_texture(own, asset);
+		}
+	}
+	slot_layer_to_fill_layer(m);
+}
+
+// Adds an entry on top of the mask stack of the selected layer or group.
+// type: 0 black paint, 1 white paint, 2 black and white fill, 3 copy of the asset in _tab_layers_mask_source,
+// 4 fill with the texture in _tab_layers_mask_asset, 5 paint that fits the stack
 void tab_layers_new_mask(i32 type) {
 	slot_layer_t *l = g_context->layer;
 	if (slot_layer_is_mask(l) || slot_layer_is_filter(l)) {
 		context_set_layer(l->parent);
 	}
 	l = g_context->layer;
+	if (type != 3) {
+		_tab_layers_mask_source = NULL;
+	}
+	if (type != 4) {
+		_tab_layers_mask_asset = -1;
+	}
 
-	slot_layer_t_array_t *pointers = tab_layers_init_layer_map();
-	slot_layer_t         *m        = layers_new_mask(false, l, -1);
+	bool                  had_masks = slot_layer_has_masks(l, false);
+	slot_layer_t_array_t *pointers  = tab_layers_init_layer_map();
+	slot_layer_t         *m         = layers_new_mask(false, l, -1);
 	if (m == NULL) {
 		return;
 	}
 	tab_layers_remap_all_layer_pointers(pointers);
-	if (type == 0) {
+	if (type == 0 || type == 5) {
+		// Painted in white. On top of other masks it adds to them, as the first mask it hides the layer until painted.
+		if (type == 5 && had_masks) {
+			m->blending = BLEND_TYPE_ADD;
+		}
 		sys_notify_on_next_frame(&tab_layers_button_new_black_mask, m);
 		history_new_black_mask();
 	}
@@ -1136,7 +1176,7 @@ void tab_layers_new_mask(i32 type) {
 		history_new_white_mask();
 	}
 	else {
-		sys_notify_on_next_frame(&tab_layers_button_new_to_fill_layer, m);
+		sys_notify_on_next_frame(&tab_layers_new_fill_mask_next_frame, m);
 		history_new_fill_mask();
 	}
 	l->show_panel                  = true;
@@ -1144,20 +1184,68 @@ void tab_layers_new_mask(i32 type) {
 	sys_notify_on_next_frame(&tab_layers_button_new_update_fill_layers, NULL);
 }
 
-// Menu of the empty mask slot
+// Menu of the mask slot: what can go into the mask stack of a layer or group
 void tab_layers_mask_slot_menu_draw(void) {
+	if (ui_menu_button(tr("Paint"), "", ICON_PAINT)) {
+		tab_layers_new_mask(5);
+	}
+	if (ui_menu_button(tr("Fill"), "", ICON_MASK_FILL)) {
+		tab_layers_new_mask(2);
+	}
+
+	// Black and white fill driven by a texture of the project, scaled and projected like any fill
+	if (ui_menu_sub_button(tr("Image"))) {
+		i32 count = g_project->_->assets->length;
+		ui_menu_sub_begin(count > 0 ? count : 1);
+		for (i32 i = 0; i < count; ++i) {
+			if (ui_menu_button(g_project->_->assets->buffer[i]->name, "", ICON_IMAGE)) {
+				_tab_layers_mask_asset = i;
+				tab_layers_new_mask(4);
+			}
+		}
+		if (count == 0) {
+			g_ui->enabled = false;
+			ui_menu_button(tr("No textures in the project"), "", ICON_NONE);
+			g_ui->enabled = true;
+		}
+		ui_menu_sub_end();
+	}
+
+	// Copy of a smart mask asset from the shelf
+	if (ui_menu_sub_button(tr("Smart Mask"))) {
+		i32 count = 0;
+		for (i32 i = 0; i < g_project->_->materials->length; ++i) {
+			if (slot_material_is_smart_mask(g_project->_->materials->buffer[i])) {
+				count++;
+			}
+		}
+		ui_menu_sub_begin(count > 0 ? count : 1);
+		for (i32 i = 0; i < g_project->_->materials->length; ++i) {
+			slot_material_t *asset = g_project->_->materials->buffer[i];
+			if (slot_material_is_smart_mask(asset) && ui_menu_button(asset->canvas->name, "", ICON_MASK_FILL)) {
+				_tab_layers_mask_source = asset;
+				tab_layers_new_mask(3);
+			}
+		}
+		if (count == 0) {
+			g_ui->enabled = false;
+			ui_menu_button(tr("No smart masks in the shelf"), "", ICON_NONE);
+			g_ui->enabled = true;
+		}
+		ui_menu_sub_end();
+	}
+
+	ui_menu_separator();
 	if (ui_menu_button(tr("Black Mask"), "", ICON_MASK)) {
 		tab_layers_new_mask(0);
 	}
 	if (ui_menu_button(tr("White Mask"), "", ICON_MASK_WHITE)) {
 		tab_layers_new_mask(1);
 	}
-	if (ui_menu_button(tr("Fill Mask"), "", ICON_MASK_FILL)) {
-		tab_layers_new_mask(2);
-	}
 }
 
-static slot_layer_t *_tab_layers_drop_mask_layer = NULL;
+static slot_layer_t    *_tab_layers_drop_mask_layer  = NULL;
+static slot_material_t *_tab_layers_drop_mask_source = NULL;
 
 static void tab_layers_drop_material_as_mask_next_frame(void *_) {
 	slot_layer_t *l = _tab_layers_drop_mask_layer;
@@ -1165,13 +1253,15 @@ static void tab_layers_drop_material_as_mask_next_frame(void *_) {
 		return;
 	}
 	context_set_layer(l);
-	tab_layers_new_mask(2);
+	_tab_layers_mask_source = _tab_layers_drop_mask_source;
+	tab_layers_new_mask(3);
 }
 
-// A material dropped onto the mask slot of a layer or group becomes a fill mask on top of its mask stack
+// An asset dropped onto the mask slot of a layer or group becomes a fill mask on top of its mask stack.
+// The asset is passed along explicitly, the active material follows the selected layer and changes in between.
 void tab_layers_drop_material_as_mask(slot_layer_t *l, slot_material_t *m) {
-	context_set_material(m);
-	_tab_layers_drop_mask_layer = l;
+	_tab_layers_drop_mask_layer  = l;
+	_tab_layers_drop_mask_source = m;
 	sys_notify_on_next_frame(&tab_layers_drop_material_as_mask_next_frame, NULL);
 }
 

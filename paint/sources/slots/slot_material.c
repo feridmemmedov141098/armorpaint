@@ -102,6 +102,96 @@ bool slot_material_is_hidden(slot_material_t *m) {
 	return m != NULL && m->canvas != NULL && (starts_with(m->canvas->name, "layer:") || starts_with(m->canvas->name, "brush:"));
 }
 
+static ui_node_t *slot_material_output_node(slot_material_t *m) {
+	for (i32 i = 0; i < m->canvas->nodes->length; ++i) {
+		ui_node_t *n = m->canvas->nodes->buffer[i];
+		if (string_equals(n->type, "OUTPUT_MATERIAL_PBR")) {
+			return n;
+		}
+	}
+	return NULL;
+}
+
+// White base color of the default material, the starting point of a black and white fill
+void slot_material_set_base_white(slot_material_t *m) {
+	// The default material holds its color in the Base Color input of the output node
+	ui_node_t *out = slot_material_output_node(m);
+	if (out != NULL && out->inputs->length > 0 && out->inputs->buffer[0]->default_value->length >= 3) {
+		out->inputs->buffer[0]->default_value->buffer[0] = 1.0;
+		out->inputs->buffer[0]->default_value->buffer[1] = 1.0;
+		out->inputs->buffer[0]->default_value->buffer[2] = 1.0;
+	}
+	// A color node driving it, when there is one
+	for (i32 i = 0; i < m->canvas->nodes->length; ++i) {
+		ui_node_t *n = m->canvas->nodes->buffer[i];
+		if (string_equals(n->type, "RGB") && n->outputs->length > 0 && n->outputs->buffer[0]->default_value->length >= 3) {
+			n->outputs->buffer[0]->default_value->buffer[0] = 1.0;
+			n->outputs->buffer[0]->default_value->buffer[1] = 1.0;
+			n->outputs->buffer[0]->default_value->buffer[2] = 1.0;
+		}
+	}
+}
+
+// Drives the base color with a project texture, asset_index is its index in the project assets
+void slot_material_set_base_texture(slot_material_t *m, i32 asset_index) {
+	ui_node_canvas_t *canvas = m->canvas;
+	ui_node_t        *out    = slot_material_output_node(m);
+	if (out == NULL || asset_index < 0 || asset_index >= g_project->_->assets->length) {
+		return;
+	}
+
+	// Drop what drives the base color now
+	ui_node_link_t *link = NULL;
+	for (i32 i = 0; i < canvas->links->length; ++i) {
+		ui_node_link_t *l = canvas->links->buffer[i];
+		if (l->to_id == out->id && l->to_socket == 0) {
+			link = l;
+			break;
+		}
+	}
+	if (link != NULL) {
+		ui_node_t *from = ui_get_node(canvas->nodes, link->from_id);
+		array_remove(canvas->links, link);
+		bool used = false;
+		for (i32 i = 0; from != NULL && i < canvas->links->length; ++i) {
+			if (canvas->links->buffer[i]->from_id == from->id) {
+				used = true;
+				break;
+			}
+		}
+		if (from != NULL && !used) {
+			ui_remove_node(from, canvas);
+		}
+	}
+
+	nodes_material_init();
+	ui_node_t *tex = ui_nodes_make_node(nodes_material_get_node_t("TEX_IMAGE"), m->nodes, canvas);
+	tex->x         = out->x - 220;
+	tex->y         = out->y;
+	any_array_push(canvas->nodes, tex);
+	tex->buttons->buffer[0]->default_value->buffer[0] = asset_index;
+	any_array_push(canvas->links, project_create_node_link(canvas->links, tex->id, 0, out->id, 0));
+}
+
+// A smart mask is an asset meant for the mask slot of a layer.
+// Recognised by an opacity driven by a pattern (edge wear and similar overlays) or by "mask" in its name.
+bool slot_material_is_smart_mask(slot_material_t *m) {
+	if (m == NULL || m->canvas == NULL || slot_material_is_hidden(m)) {
+		return false;
+	}
+	if (string_index_of(to_lower_case(m->canvas->name), "mask") >= 0) {
+		return true;
+	}
+	ui_node_t *out = slot_material_output_node(m);
+	for (i32 i = 0; out != NULL && i < m->canvas->links->length; ++i) {
+		ui_node_link_t *l = m->canvas->links->buffer[i];
+		if (l->to_id == out->id && l->to_socket == 1) { // Opacity
+			return true;
+		}
+	}
+	return false;
+}
+
 // The material the brush paints with: its own color, roughness, metallic and height.
 // Paint layers and paint masks each have one, a mask is painted in white until the color is changed.
 // Created on first use and saved with the project.
@@ -119,14 +209,7 @@ slot_material_t *slot_material_brush(bool mask) {
 	slot_material_t *m = slot_material_create(g_project->_->materials->buffer[0]->data, NULL);
 	m->canvas->name    = name;
 	if (mask) {
-		for (i32 i = 0; i < m->canvas->nodes->length; ++i) {
-			ui_node_t *n = m->canvas->nodes->buffer[i];
-			if (string_equals(n->type, "RGB") && n->outputs->length > 0 && n->outputs->buffer[0]->default_value->length >= 3) {
-				n->outputs->buffer[0]->default_value->buffer[0] = 1.0;
-				n->outputs->buffer[0]->default_value->buffer[1] = 1.0;
-				n->outputs->buffer[0]->default_value->buffer[2] = 1.0;
-			}
-		}
+		slot_material_set_base_white(m);
 	}
 	any_array_push(g_project->_->materials, m);
 	return m;

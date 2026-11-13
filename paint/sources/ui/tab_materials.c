@@ -3,6 +3,7 @@
 
 i32 _tab_materials_draw_slots;
 i32 tab_materials_drag_pos = -1;
+i32 tab_materials_section  = 0; // Shelf section shown: 0 all, 1 materials, 2 smart masks
 
 void tab_materials_button_nodes() {
 	if (ui_button(tr("Nodes"), UI_ALIGN_CENTER, "")) {
@@ -161,6 +162,7 @@ void tab_materials_draw_slots_menu() {
 
 	if (ui_menu_button(tr("To Fill Layer"), "", ICON_SPHERE)) {
 		context_select_material(i);
+		layers_fill_source = m; // The new layer gets its own copy of this asset
 		layers_create_fill_layer(UV_TYPE_UVMAP, mat4_nan(), -1);
 	}
 
@@ -241,9 +243,16 @@ void tab_materials_draw_slots(bool mini) {
 	i32_array_t *vis       = i32_array_create(g_project->_->materials->length + 1);
 	i32          vis_count = 0;
 	for (i32 i = 0; i < g_project->_->materials->length; ++i) {
-		if (!slot_material_is_hidden(g_project->_->materials->buffer[i])) {
-			vis->buffer[vis_count++] = i;
+		slot_material_t *m = g_project->_->materials->buffer[i];
+		if (slot_material_is_hidden(m)) {
+			continue;
 		}
+		// Shelf sections: 0 all, 1 materials, 2 smart masks
+		bool smart_mask = slot_material_is_smart_mask(m);
+		if (!mini && ((tab_materials_section == 1 && smart_mask) || (tab_materials_section == 2 && !smart_mask))) {
+			continue;
+		}
+		vis->buffer[vis_count++] = i;
 	}
 
 	for (i32 row = 0; row < math_floor(math_ceil(vis_count / (float)num)); ++row) {
@@ -469,6 +478,19 @@ void tab_materials_draw_full(i32 *htab) {
 
 		ui_end_sticky();
 		ui_separator(3, false);
+
+		// Sections of the shelf. A smart mask is an asset for the mask slot of a layer:
+		// its opacity is driven by a pattern, or it has "mask" in its name.
+		string_array_t *sections = any_array_create_from_raw(
+		    (void *[]){
+		        tr("All"),
+		        tr("Materials"),
+		        tr("Smart Masks"),
+		    },
+		    3);
+		ui_set_next_id((ui_id_t)&tab_materials_section);
+		ui_inline_radio(&tab_materials_section, sections, UI_ALIGN_LEFT);
+
 		tab_materials_draw_slots(false); // Parameters of the picked asset are in the properties tab
 	}
 }
