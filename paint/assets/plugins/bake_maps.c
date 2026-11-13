@@ -10,10 +10,10 @@ int   box_tab  = 0;
 bool  box_open = false;
 bool  expanded = true; // Plugins tab panel
 
-char *map_names[13];
-char *map_suffixes[13];
-int   map_types[13]; // bake_type_t, 14 is cavity
-bool  map_enabled[13];
+char *map_names[14];
+char *map_suffixes[14];
+int   map_types[14]; // bake_type_t, 14 is cavity
+bool  map_enabled[14];
 
 int   res_index       = 1;
 float rays            = 64;
@@ -30,6 +30,8 @@ float curv_offset     = 0.0;
 float curv_smooth     = 1;
 float cavity_size     = 2.0;
 float cavity_contrast = 1.0;
+float bevel_radius    = 0.05; // Object units
+float bevel_samples   = 32;
 
 bool  use_high    = false;
 char *high_path   = "";
@@ -55,7 +57,7 @@ bool  show_cage     = true;
 bool  show_miss     = true;
 
 bool running = false;
-int  queue[13];
+int  queue[14];
 int  queue_len  = 0;
 int  queue_i    = 0;
 int  done_count = 0;
@@ -75,7 +77,7 @@ void add_map(int i, char *name, char *suffix, int type, bool enabled) {
 }
 
 bool any_selected(int a, int b) {
-	for (int i = 0; i < 13; ++i) {
+	for (int i = 0; i < 14; ++i) {
 		if (map_enabled[i] && (map_types[i] == a || map_types[i] == b)) {
 			return true;
 		}
@@ -214,7 +216,7 @@ void start_next() {
 
 void run() {
 	queue_len = 0;
-	for (int i = 0; i < 13; ++i) {
+	for (int i = 0; i < 14; ++i) {
 		if (map_enabled[i]) {
 			queue[queue_len] = i;
 			queue_len        = queue_len + 1;
@@ -247,6 +249,7 @@ void run() {
 	bake_maps_set_ao(ao_strength, ao_radius, ao_offset);
 	bake_maps_set_curvature(curv_strength, curv_radius, curv_offset, curv_smooth);
 	bake_maps_set_cavity(cavity_size, cavity_contrast);
+	bake_maps_set_bevel(bevel_radius, bevel_samples);
 
 	int sizes[4] = {1024, 2048, 4096, 8192};
 	bake_res     = sizes[res_index];
@@ -270,7 +273,7 @@ char *map_path(int i) {
 // Maps with a texture in the project, repaired by the stroke
 int inpaint_targets(int *out) {
 	int count = 0;
-	for (int i = 0; i < 13; ++i) {
+	for (int i = 0; i < 14; ++i) {
 		if (script_asset_index(map_path(i)) >= 0) {
 			out[count] = i;
 			count      = count + 1;
@@ -289,7 +292,7 @@ void inpaint_stroke() {
 			console_error("Inpaint is not available while baking");
 			return;
 		}
-		int targets[13];
+		int targets[14];
 		int count = inpaint_targets(targets);
 		if (count == 0) {
 			console_error("Inpaint: no baked maps found for this mesh, bake them first");
@@ -307,7 +310,7 @@ void inpaint_stroke() {
 
 void inpaint_stroke_end() {
 	if (inpaint_ready) {
-		int targets[13];
+		int targets[14];
 		int count = inpaint_targets(targets);
 		int done  = 0;
 		for (int k = 0; k < count; ++k) {
@@ -315,7 +318,7 @@ void inpaint_stroke_end() {
 				continue;
 			}
 			int  i      = targets[k];
-			bool vector = string_index_of(map_suffixes[i], "normal") >= 0;
+			bool vector = string_index_of(map_suffixes[i], "normal") >= 0 || string_equals(map_suffixes[i], "bevel");
 			if (bake_maps_inpaint_apply(map_path(i), inpaint_mode, vector)) {
 				done = done + 1;
 			}
@@ -334,7 +337,7 @@ void inpaint_header() {
 	mode_combo->buffer[1]      = "Smooth";
 	ui_combo(&inpaint_mode, mode_combo, "Mode", true, UI_ALIGN_LEFT, true);
 
-	int             targets[13];
+	int             targets[14];
 	int             count     = inpaint_targets(targets);
 	string_array_t *map_combo = string_array_create(count + 1);
 	map_combo->buffer[0]      = "All Baked Maps";
@@ -470,10 +473,10 @@ void draw_progress() {
 
 void draw_maps() {
 	bake_maps_ui_section("Maps");
-	for (int i = 0; i < 13; i += 2) {
+	for (int i = 0; i < 14; i += 2) {
 		ui_row2();
 		ui_check(&map_enabled[i], map_names[i], "");
-		if (i + 1 < 13) {
+		if (i + 1 < 14) {
 			ui_check(&map_enabled[i + 1], map_names[i + 1], "");
 		}
 		else {
@@ -482,12 +485,12 @@ void draw_maps() {
 	}
 	ui_row2();
 	if (ui_button("Select All", UI_ALIGN_CENTER, "")) {
-		for (int i = 0; i < 13; ++i) {
+		for (int i = 0; i < 14; ++i) {
 			map_enabled[i] = true;
 		}
 	}
 	if (ui_button("Select None", UI_ALIGN_CENTER, "")) {
-		for (int i = 0; i < 13; ++i) {
+		for (int i = 0; i < 14; ++i) {
 			map_enabled[i] = false;
 		}
 	}
@@ -582,6 +585,12 @@ void draw_settings() {
 		ui_text("Cavity", UI_ALIGN_LEFT, 0);
 		ui_slider(&cavity_size, "Detail Size", 1.0, 16.0, true, 10.0, true, UI_ALIGN_RIGHT, true);
 		ui_slider(&cavity_contrast, "Contrast", 0.5, 6.0, true, 100.0, true, UI_ALIGN_RIGHT, true);
+	}
+	if (any_selected(15, 15)) {
+		ui_text("Bevel", UI_ALIGN_LEFT, 0);
+		ui_slider(&bevel_radius, "Radius", 0.001, 0.5, true, 1000.0, true, UI_ALIGN_RIGHT, true);
+		ui_slider(&bevel_samples, "Samples", 4, 128, false, 1, true, UI_ALIGN_RIGHT, true);
+		bevel_samples = floor(bevel_samples);
 	}
 }
 
@@ -772,6 +781,7 @@ void main() {
 	add_map(10, "Vertex Color", "vertex_color", 9, false);
 	add_map(11, "TexCoord", "texcoord", 6, false);
 	add_map(12, "Cavity", "cavity", 14, false);
+	add_map(13, "Bevel", "bevel", 15, false); // Tangent space normal map with hard edges rounded
 
 	plugin = plugin_create();
 	plugin_notify_on_ui(plugin, on_ui);

@@ -52,6 +52,7 @@ unsigned char     *stbi_load_from_memory(unsigned char const *buffer, int len, i
 void               stbi_image_free(void *p);
 
 #define BAKE_TYPE_CAVITY 14 // Cpu only, signed curvature of the sampled surface
+#define BAKE_TYPE_BEVEL  15 // Cpu only, normals rounded over hard edges within a radius, like Blender's Bevel node
 
 typedef struct bake_rays_node {
 	f32 min[3];
@@ -119,6 +120,8 @@ typedef struct bake_rays_job {
 	i32  curv_smooth;
 	i32  axis;
 	bool up_y;
+	f32  bevel_radius; // Object units
+	i32  bevel_samples;
 } bake_rays_job_t;
 
 #define BAKE_RAYS_MAX_THREADS 32
@@ -131,6 +134,8 @@ static bake_rays_job_t bake_rays_settings = {
     .curv_radius     = 1.0,
     .cavity_texels   = 2.0,
     .cavity_contrast = 1.0,
+    .bevel_radius    = 0.05,
+    .bevel_samples   = 32,
 };
 static iron_thread_t bake_rays_threads[BAKE_RAYS_MAX_THREADS];
 static i32           bake_rays_thread_count = 0;
@@ -961,6 +966,48 @@ static void bake_rays_texel_occlusion(bake_rays_surf_t *s, i32 x, i32 y, u8 *o) 
 	bake_rays_store(o, accum, accum, accum);
 }
 
+// Fake bevel: rays in all directions from the surface point, up to the radius. Faces they reach (from either side: the
+// adjacent face of a convex edge is hit from inside, of a concave edge from outside) blend their normals in, weighted by
+// closeness. Stored as a tangent space normal map against the low poly normal.
+static void bake_rays_texel_bevel(bake_rays_surf_t *s, i32 x, i32 y, u8 *o) {
+	bake_rays_bvh_t *bvh   = s->high ? &bake_rays_hp : &bake_rays_lpb;
+	i32              count = bake_rays_imax(bake_rays_job.bevel_samples, 1);
+	f32              r     = bake_rays_fmax(bake_rays_job.bevel_radius, 1e-5) * s->tri->scale;
+	u32              seed  = bake_rays_hash((u32)(y * bake_rays_w + x) * 2654435761u + 15u);
+	f32              r0    = (seed & 0xffff) / 65536.0;
+	f32              r1    = (bake_rays_hash(seed) & 0xffff) / 65536.0;
+	f32              sum[3] = {s->n[0], s->n[1], s->n[2]};
+	for (i32 i = 0; i < count; ++i) {
+		f32 dir[3];
+		f32 hn[3] = {-s->n[0], -s->n[1], -s->n[2]};
+		bake_rays_hemisphere((i & 1) ? hn : s->n, i / 2, (count + 1) / 2, r0, r1, dir); // Both hemispheres
+		f32 t, u, v;
+		i32 hit = bake_rays_trace(bvh, s->p, dir, r * 0.001, r, -1.0, false, false, &t, &u, &v);
+		if (hit < 0) {
+			continue;
+		}
+		f32 *tn = bvh->nor + hit * 9;
+		f32  w0 = 1.0 - u - v;
+		f32  w  = 1.0 - t / r;
+		f32  n[3];
+		for (i32 k = 0; k < 3; ++k) {
+			n[k] = tn[k] * w0 + tn[3 + k] * u + tn[6 + k] * v;
+		}
+		bake_rays_v3_norm(n);
+		if (bake_rays_v3_dot(n, s->n) < -0.5) {
+			continue; // The opposite side of a thin part, not an edge
+		}
+		for (i32 k = 0; k < 3; ++k) {
+			sum[k] += n[k] * w * 2.0 / count;
+		}
+	}
+	bake_rays_v3_norm(sum);
+	bake_rays_surf_t b = *s;
+	memcpy(b.n, sum, sizeof(f32) * 3);
+	b.high = true; // Encode b.n against the low poly frame
+	bake_rays_texel_normal(&b, o);
+}
+
 static void bake_rays_texel_curvature(bake_rays_surf_t *s, i32 ti, i32 x, i32 y, u8 *o) {
 	// Normal derivatives along the texel grid, extrapolated within the triangle
 	bake_rays_surf_t sx, sy;
@@ -1041,6 +1088,9 @@ static void bake_rays_texel(i32 x, i32 y) {
 	}
 	else if (type == BAKE_TYPE_CURVATURE) {
 		bake_rays_texel_curvature(&s, ti, x, y, o);
+	}
+	else if (type == BAKE_TYPE_BEVEL) {
+		bake_rays_texel_bevel(&s, x, y, o);
 	}
 	else if (type == BAKE_TYPE_NORMAL_OBJECT) {
 		bake_rays_store_vector(o, s.n, 0.5);
@@ -1612,6 +1662,13 @@ static minic_val_t bake_maps_set_curvature(minic_val_t *a, int n) {
 static minic_val_t bake_maps_set_cavity(minic_val_t *a, int n) {
 	bake_rays_settings.cavity_texels   = bake_maps_arg_f(a, n, 0);
 	bake_rays_settings.cavity_contrast = bake_maps_arg_f(a, n, 1);
+	return minic_val_int(0);
+}
+
+// void bake_maps_set_bevel(float radius, int samples)
+static minic_val_t bake_maps_set_bevel(minic_val_t *a, int n) {
+	bake_rays_settings.bevel_radius  = bake_maps_arg_f(a, n, 0);
+	bake_rays_settings.bevel_samples = bake_maps_arg_i(a, n, 1);
 	return minic_val_int(0);
 }
 
@@ -2674,6 +2731,7 @@ void bake_maps_init() {
 	minic_register("bake_maps_set_ao", "v(f,f,f)", bake_maps_set_ao);
 	minic_register("bake_maps_set_curvature", "v(f,f,f,i)", bake_maps_set_curvature);
 	minic_register("bake_maps_set_cavity", "v(f,f)", bake_maps_set_cavity);
+	minic_register("bake_maps_set_bevel", "v(f,i)", bake_maps_set_bevel);
 	minic_register("bake_maps_start", "b(i,i,i,i,b,i,i)", bake_maps_start);
 	minic_register("bake_maps_gpu_supported", "b()", bake_maps_gpu_supported);
 	minic_register("bake_maps_gpu_res", "i()", bake_maps_gpu_res);

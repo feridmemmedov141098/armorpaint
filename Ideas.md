@@ -1,4 +1,4 @@
-# Ideas
+﻿# Ideas
 
 To-do list of ideas for the app. Add new ones at the bottom of "Open", tick them off when done.
 
@@ -10,7 +10,7 @@ To-do list of ideas for the app. Add new ones at the bottom of "Open", tick them
 - [ ] Drop an asset onto the brush to paint with it
 - [ ] Delete the hidden Sculpt and Object code for a lighter app
 - [ ] UV reprojection that also handles quads split along a different diagonal
-- [ ] Blender-like "Bevel" node: a fake bevel on edges, rounding hard edges in the shading (normals) without changing the mesh
+- [x] Blender-like "Bevel" node: a fake bevel on edges, rounding hard edges in the shading (normals) without changing the mesh
 
 ## Done
 
