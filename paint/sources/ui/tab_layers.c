@@ -64,6 +64,11 @@ void tab_layers_handle_layer_icon_state(slot_layer_t *l, i32 i, ui_state_t state
 		context_set_layer(l);
 		tab_layers_set_drag_layer(g_context->layer, -(mouse_x - uix - g_ui->_window_x - 3), -(mouse_y - uiy - g_ui->_window_y + 1));
 	}
+	else if (state == UI_STATE_RELEASED && slot_layer_is_group(l)) {
+		// Clicking the folder icon opens or closes the folder
+		l->show_panel = !l->show_panel;
+		ui_dock_redraw(TAB_AREA_SIDEBAR0);
+	}
 	else if (state == UI_STATE_RELEASED) {
 		if (sys_time() - g_context->select_time < 0.2) {
 			ui_base_show_2d_view(VIEW_2D_TYPE_LAYER);
@@ -443,12 +448,11 @@ void tab_layers_draw_layer_slot_full(slot_layer_t *l, i32 i) {
 	f32 uix    = g_ui->_x;
 	f32 uiy    = g_ui->_y;
 
-	bool has_children = tab_layers_has_children(l);
-	bool has_combos   = !slot_layer_is_group(l) && !slot_layer_is_mask(l) && !slot_layer_is_filter(l);
+	bool has_combos  = !slot_layer_is_group(l) && !slot_layer_is_mask(l) && !slot_layer_is_filter(l);
 	bool mask_combo   = slot_layer_is_mask(l); // Blending with the masks below
 	bool mask_slot    = !slot_layer_is_mask(l) && !slot_layer_is_filter(l);
 
-	// Columns: eye | indent | icon | mask slot | name | combo | expand arrow
+	// Columns: eye | indent | icon | mask slot | name | combo | margin
 	i32 depth = 0;
 	for (slot_layer_t *p = l->parent; p != NULL; p = p->parent) {
 		++depth;
@@ -461,7 +465,7 @@ void tab_layers_draw_layer_slot_full(slot_layer_t *l, i32 i) {
 	f32 slot_h   = math_floor(icon_h * 0.8);
 	f32 slot_x   = icon_x + icon_h + 6 * UI_SCALE();
 	f32 name_x   = (mask_slot ? slot_x + slot_h : icon_x + icon_h) + 8 * UI_SCALE();
-	f32 arrow_w  = 24 * UI_SCALE();
+	f32 arrow_w  = 8 * UI_SCALE(); // Right margin, the expand arrow column is gone
 	f32 arrow_x  = uix + uiw - arrow_w;
 	f32 combo_w  = uiw * (mask_slot ? 0.24 : 0.30);
 	f32 combo_x  = arrow_x - combo_w;
@@ -574,25 +578,7 @@ void tab_layers_draw_layer_slot_full(slot_layer_t *l, i32 i) {
 		tab_layers_combo_mask_blending(l, false);
 	}
 
-	// Expand arrow, enlarged and centered in its column
-	if (has_children) {
-		i32 arrow_size       = g_theme->ARROW_SIZE;
-		i32 label_col        = g_theme->LABEL_COL;
-		f32 arrow_offset_x   = g_ui->arrow_offset_x;
-		f32 arrow_offset_y   = g_ui->arrow_offset_y;
-		g_theme->ARROW_SIZE  = math_floor(arrow_size * 1.6);
-		g_theme->LABEL_COL   = col; // Same as the eye icon
-		g_ui->arrow_offset_x = (arrow_w - UI_ARROW_SIZE()) / 2.0;
-		g_ui->arrow_offset_y = (UI_ELEMENT_H() - UI_ARROW_SIZE()) / 2.0;
-		g_ui->_x             = arrow_x;
-		g_ui->_y             = uiy + center;
-		g_ui->_w             = arrow_w;
-		ui_panel(&l->show_panel, "", false, false, true);
-		g_theme->ARROW_SIZE  = arrow_size;
-		g_theme->LABEL_COL   = label_col;
-		g_ui->arrow_offset_x = arrow_offset_x;
-		g_ui->arrow_offset_y = arrow_offset_y;
-	}
+	// No expand arrow: a folder opens and closes from its icon, a mask stack from the mask slot
 
 	g_ui->_x = uix;
 	g_ui->_y = uiy + step * 2 * UI_SCALE();

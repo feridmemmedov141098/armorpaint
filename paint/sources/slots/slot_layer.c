@@ -427,8 +427,9 @@ slot_layer_t *slot_layer_duplicate(slot_layer_t *raw) {
 	slot_layer_t *l = slot_layer_copy(raw);
 	array_insert(g_project->_->layers, array_index_of(g_project->_->layers, raw) + 1, l);
 	tab_stages_add_layer(l->name);
-	if (slot_material_is_layer_owned(raw->fill_material)) {
-		// The copy gets its own material, editing one layer must not change the other
+	if (raw->fill_material != NULL) {
+		// The copy always gets its own material, editing one layer must not change the other.
+		// Also when the original still uses a shared asset material (projects saved before fill layers owned their material).
 		l->fill_material = slot_layer_make_owned_material(l, raw->fill_material);
 	}
 	return l;
