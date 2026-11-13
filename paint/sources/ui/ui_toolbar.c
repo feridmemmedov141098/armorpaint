@@ -303,8 +303,7 @@ void ui_toolbar_header_menu_draw() {
 	if (ui_menu_button(tr("Toggle Header"), "", ICON_PROPERTIES)) {
 		g_config->header_pinned = false;
 	}
-	ui_menu_separator();
-	ui_menubar_draw_tools();
+	// Paint is the only tool mode, the Tools switch (Paint / Sculpt / Object) is not shown
 }
 
 static void ui_toolbar_draw_window(ui_window_t *handle, i32 x, i32 y, i32 h) {

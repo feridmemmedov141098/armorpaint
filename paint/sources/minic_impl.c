@@ -1181,7 +1181,8 @@ void script_quit(void) {
 }
 
 void script_set_tools(i32 tools) {
-	if (tools < TOOLS_PAINT || tools > TOOLS_OBJECT || tools == g_config->tools) {
+	// Paint is the only tool mode, scripts can no longer switch to Sculpt or Object
+	if (tools != TOOLS_PAINT || tools == g_config->tools) {
 		return;
 	}
 	gpu_texture_t *current;

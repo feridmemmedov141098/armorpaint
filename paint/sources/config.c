@@ -306,6 +306,8 @@ void config_init() {
 	else {
 		g_config->sha = string_copy(config_get_sha());
 	}
+	// Paint is the only tool mode, a config saved in Sculpt or Object mode starts in Paint
+	g_config->tools = TOOLS_PAINT;
 
 	ui_touch_control = g_config->touch_ui;
 	ui_tooltips      = g_config->tooltips;
@@ -523,6 +525,7 @@ void config_import_from(config_t *from) {
 	g_config          = from;
 	g_config->sha     = string_copy(_sha);
 	g_config->version = string_copy(_version);
+	g_config->tools   = TOOLS_PAINT; // Paint is the only tool mode
 	keymap_load();
 	base_set_workspace(WORKSPACE_PRESET_NONE);
 	translator_load_translations(g_config->locale);

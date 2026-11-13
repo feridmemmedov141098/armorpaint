@@ -798,9 +798,7 @@ void ui_menubar_draw_category_items() {
 			}
 			ui_menu_sub_end();
 		}
-
-		ui_menu_separator();
-		ui_menubar_draw_tools();
+		// Paint is the only tool mode, the Tools switch (Paint / Sculpt / Object) is not shown
 	}
 }
 
