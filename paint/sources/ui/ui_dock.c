@@ -347,7 +347,8 @@ void ui_dock_reset() {
 
 	f32 scale     = g_config->window_scale;
 	i32 sidebar_w = math_floor(ui_base_sidebar_default_w(g_config->large_asset_previews) * scale);
-	i32 status_h  = math_floor(ui_statusbar_default_h * scale);
+	// The bottom area opens at full height so the Assets shelf is visible, not only its tab names
+	i32 status_h = ui_dock_status_expanded_h(g_config->large_asset_previews);
 	// Views take the space next to the sidebar and the toolbar
 	i32 views_w = iron_window_width() - sidebar_w - math_floor(ui_toolbar_default_w * scale);
 #if defined(IRON_IOS) || defined(IRON_ANDROID)
@@ -385,8 +386,11 @@ f32 ui_dock_get_size(i32 role) {
 // ███████║   ██║   ╚██████╔╝██║  ██║███████╗
 // ╚══════╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝╚══════╝
 
-// Stored in config as the root node
+// Stored in config as a version marker followed by the root node
 // split {-1, vertical, fixed, size, collapsed, role, node a, node b}, leaf {tab count, active, tab ids}
+// Raise the version (more negative) when the default layout changes: layouts saved before it are replaced by the new default once.
+// Version 1: Assets shelf open at the bottom, Properties in the lower sidebar.
+#define DOCK_LAYOUT_VERSION -101
 static void dock_save_node(i32_array_t *a, dock_node_t *n) {
 	if (dock_is_leaf(n)) {
 		i32_array_push(a, n->tab_count);
@@ -416,6 +420,7 @@ void ui_dock_save() {
 	}
 	i32_array_t *a = g_config->layout_tabs;
 	a->length      = 0;
+	i32_array_push(a, DOCK_LAYOUT_VERSION);
 	dock_save_node(a, ui_dock_root);
 	config_save();
 }
@@ -473,10 +478,13 @@ static dock_node_t *dock_load_node(i32_array_t *a, i32 *pos, bool *docked, i32 d
 void ui_dock_load() {
 	i32_array_t *a   = g_config->layout_tabs;
 	i32          pos = 0;
-	if (a == NULL || a->length == 0) {
+	// No layout yet, or one saved before the current default layout: start from the default
+	if (a == NULL || a->length == 0 || a->buffer[0] != DOCK_LAYOUT_VERSION) {
 		ui_dock_reset();
+		ui_dock_save();
 		return;
 	}
+	pos                            = 1;
 	bool         docked[TAB_COUNT] = {0};
 	dock_node_t *root              = dock_load_node(a, &pos, docked, 0);
 	if (root == NULL) {
