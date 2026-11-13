@@ -293,6 +293,15 @@ void base_update(void *_) {
 	if (has_drag && (mouse_movement_x != 0 || mouse_movement_y != 0)) {
 		base_is_dragging = true;
 	}
+
+	// Mask slots glow while something that fits a mask stack is dragged, wherever the cursor is.
+	// The layer list only redraws on input over it, so keep it redrawing during the drag and once after to clear the glow.
+	static bool mask_glow = false;
+	bool        glow      = base_is_dragging && tab_layers_drag_fits_mask();
+	if (glow || mask_glow) {
+		ui_dock_redraw(TAB_AREA_SIDEBAR0);
+	}
+	mask_glow = glow;
 	if (mouse_released("left") && has_drag) {
 		if (base_drag_asset != NULL) {
 

@@ -85,6 +85,62 @@ void tab_layers_handle_layer_icon_state(slot_layer_t *l, i32 i, ui_state_t state
 	}
 }
 
+// Top of the shaded row lines drawn by tab_layers_highlight_odd_lines, every other row is a little darker
+static f32 _tab_layers_rows_top = 0;
+
+static u32 tab_layers_row_bg(f32 row_y) {
+	f32 step = g_theme->ELEMENT_H * 2 * UI_SCALE();
+	i32 row  = (i32)math_floor((row_y - _tab_layers_rows_top) / step + 0.5);
+	return row % 2 == 0 ? base_darker(g_theme->WINDOW_BG_COL, 0x00040404) : g_theme->WINDOW_BG_COL;
+}
+
+// Quarter of a square outside a rounded corner, white and opaque outside the arc, antialiased
+static gpu_texture_t *_tab_layers_corner   = NULL;
+static i32            _tab_layers_corner_r = 0;
+
+static gpu_texture_t *tab_layers_corner_texture(i32 r) {
+	if (_tab_layers_corner != NULL && _tab_layers_corner_r == r) {
+		return _tab_layers_corner;
+	}
+	if (_tab_layers_corner != NULL) {
+		gpu_delete_texture(_tab_layers_corner);
+	}
+	u8_array_t *b = u8_array_create(r * r * 4);
+	for (i32 py = 0; py < r; ++py) {
+		for (i32 px = 0; px < r; ++px) {
+			f32 dx = r - (px + 0.5);
+			f32 dy = r - (py + 0.5);
+			f32 a  = math_sqrt(dx * dx + dy * dy) - r + 0.5;
+			a      = a < 0 ? 0 : a > 1 ? 1 : a;
+			i32 k  = (py * r + px) * 4;
+			b->buffer[k]     = 255;
+			b->buffer[k + 1] = 255;
+			b->buffer[k + 2] = 255;
+			b->buffer[k + 3] = (u8)(a * 255);
+		}
+	}
+	_tab_layers_corner   = gpu_create_texture_from_bytes(b, r, r, GPU_TEXTURE_FORMAT_RGBA32);
+	_tab_layers_corner_r = r;
+	array_free(b);
+	free(b);
+	return _tab_layers_corner;
+}
+
+// Rounds the corners of a square thumbnail by covering them with the row background
+static void tab_layers_round_corners(f32 x, f32 y, f32 size, u32 bg) {
+	i32 r = (i32)math_floor(5 * UI_SCALE());
+	if (r < 2 || size < r * 2) {
+		return;
+	}
+	gpu_texture_t *corner = tab_layers_corner_texture(r);
+	draw_set_color(bg);
+	draw_scaled_image(corner, x, y, r, r);
+	draw_scaled_image(corner, x + size, y, -r, r);
+	draw_scaled_image(corner, x, y + size, r, -r);
+	draw_scaled_image(corner, x + size, y + size, -r, -r);
+	draw_set_color(0xffffffff);
+}
+
 ui_state_t tab_layers_draw_layer_icon(slot_layer_t *l, i32 i, f32 uix, f32 uiy, bool mini) {
 	gpu_texture_t *icons  = resource_get("icons.k");
 	i32            icon_h = (UI_ELEMENT_H() - (mini ? 2 : 3)) * 2;
@@ -111,6 +167,12 @@ ui_state_t tab_layers_draw_layer_icon(slot_layer_t *l, i32 i, f32 uix, f32 uiy, 
 			icon = texpaint_preview;
 		}
 
+		// Thumbnails are drawn exactly at _x so their rounded corners line up, not shifted for a scrollbar
+		bool scroll_align        = g_ui->image_scroll_align;
+		g_ui->image_scroll_align = false;
+		f32 thumb_x              = g_ui->_x;
+		f32 thumb_y              = g_ui->_y;
+
 		if (l->path_material == NULL) {
 			// Checker
 			rect_t *r  = resource_tile50(icons, ICON_CHECKER);
@@ -127,11 +189,12 @@ ui_state_t tab_layers_draw_layer_icon(slot_layer_t *l, i32 i, f32 uix, f32 uiy, 
 			gpu_set_int(ui_view2d_channel_loc, 1);
 		}
 
-		ui_state_t state = ui_image(icon, 0xffffffff, icon_h);
-
+		ui_state_t state         = ui_image(icon, 0xffffffff, icon_h);
+		g_ui->image_scroll_align = scroll_align;
 		if (slot_layer_is_mask(l)) {
 			draw_set_pipeline(NULL);
 		}
+		tab_layers_round_corners(thumb_x, thumb_y, icon_h, tab_layers_row_bg(uiy));
 
 		// Draw layer numbers when selecting a layer via keyboard shortcut
 		bool is_typing = g_ui->is_typing;
@@ -390,48 +453,60 @@ bool tab_layers_drag_fits_mask() {
 	return false;
 }
 
-static void tab_layers_draw_mask_slot(slot_layer_t *l, f32 x, f32 y, f32 size) {
+static void tab_layers_draw_mask_slot(slot_layer_t *l, f32 x, f32 y, f32 size, u32 row_bg) {
 	bool dragging = base_is_dragging && tab_layers_drag_fits_mask();
 	bool hover    = mouse_x > g_ui->_window_x + x && mouse_x < g_ui->_window_x + x + size && mouse_y > g_ui->_window_y + y &&
 	                mouse_y < g_ui->_window_y + y + size;
 
-	f32 _x = g_ui->_x;
-	f32 _y = g_ui->_y;
-	f32 _w = g_ui->_w;
 	if (l->mask_slot_preview != NULL) {
-		g_ui->_x = x;
-		g_ui->_y = y;
-		g_ui->_w = size;
+		f32  _x                  = g_ui->_x;
+		f32  _y                  = g_ui->_y;
+		f32  _w                  = g_ui->_w;
+		bool scroll_align        = g_ui->image_scroll_align;
+		g_ui->_x                 = x;
+		g_ui->_y                 = y;
+		g_ui->_w                 = size;
+		g_ui->image_scroll_align = false; // Exactly at x, like the layer thumbnail
 		ui_image(l->mask_slot_preview, 0xffffffff, size);
+		g_ui->image_scroll_align = scroll_align;
+		g_ui->_x                 = _x;
+		g_ui->_y                 = _y;
+		g_ui->_w                 = _w;
 	}
-	g_ui->_x = _x;
-	g_ui->_y = _y;
-	g_ui->_w = _w;
+	else {
+		// Empty slot: the mask symbol, a white and a black half split by the diagonal, muted until hovered
+		u8 a = hover ? 0xff : 0x99;
+		draw_set_color((a << 24) | 0x00e6e6e6);
+		draw_filled_triangle(x, y, x + size, y, x, y + size);
+		draw_set_color((a << 24) | 0x00101010);
+		draw_filled_triangle(x + size, y, x + size, y + size, x, y + size);
+	}
+	tab_layers_round_corners(x, y, size, row_bg);
 
 	// Frame. While something that fits a mask stack is dragged, every mask slot glows a soft orange, the one under the mouse brighter.
 	if (dragging) {
 		u32 glow = 0x00f2a65a; // Soft orange
 		if (hover) {
 			draw_set_color(glow | 0x2e000000);
-			draw_filled_rect(x, y, size, size);
+			ui_draw_rect(true, false, x, y, size, size);
 			tab_layers_drop_mask_layer = l;
 		}
 		else if (tab_layers_drop_mask_layer == l) {
 			tab_layers_drop_mask_layer = NULL;
 		}
 		// Halo fading outwards
-		u32 halo[3] = {hover ? 0x60 : 0x34, hover ? 0x30 : 0x1a, hover ? 0x14 : 0x0a};
-		for (i32 k = 0; k < 3; ++k) {
-			f32 o = (k + 1) * 2 * UI_SCALE();
-			draw_set_color(glow | (halo[k] << 24));
-			draw_rect(x - o, y - o, size + o * 2, size + o * 2, 2 * UI_SCALE());
+		for (i32 k = 1; k <= 5; ++k) {
+			f32 o = k * UI_SCALE();
+			u32 a = (u32)((hover ? 0x70 : 0x40) * (6 - k) / 6);
+			draw_set_color(glow | (a << 24));
+			ui_draw_rect(false, false, x - o, y - o, size + o * 2, size + o * 2);
 		}
-		draw_set_color(glow | (hover ? 0xff000000 : 0xb0000000));
-		draw_rect(x, y, size, size, 1.5 * UI_SCALE());
+		draw_set_color(glow | (hover ? 0xff000000 : 0xc0000000));
+		ui_draw_rect(false, false, x, y, size, size);
 	}
-	else {
-		draw_set_color(hover ? g_theme->LABEL_COL : g_theme->SEPARATOR_COL);
-		draw_rect(x, y, size, size, 1 * UI_SCALE());
+	else if (hover) {
+		draw_set_color(g_theme->LABEL_COL);
+		ui_draw_rect(false, false, x, y, size, size);
 	}
 	draw_set_color(0xffffffff);
 
@@ -470,7 +545,7 @@ void tab_layers_draw_layer_slot_full(slot_layer_t *l, i32 i) {
 	f32 uix    = g_ui->_x;
 	f32 uiy    = g_ui->_y;
 
-	bool has_combos  = !slot_layer_is_group(l) && !slot_layer_is_mask(l) && !slot_layer_is_filter(l);
+	bool has_combos   = !slot_layer_is_group(l) && !slot_layer_is_mask(l) && !slot_layer_is_filter(l);
 	bool mask_combo   = slot_layer_is_mask(l); // Blending with the masks below
 	bool mask_slot    = !slot_layer_is_mask(l) && !slot_layer_is_filter(l);
 
@@ -484,9 +559,9 @@ void tab_layers_draw_layer_slot_full(slot_layer_t *l, i32 i) {
 	f32 indent_x = eye_x + eye_w + 4 * UI_SCALE();
 	i32 icon_h   = (UI_ELEMENT_H() - 3) * 2;
 	f32 icon_x   = indent_x + depth * 14 * UI_SCALE();
-	f32 slot_h   = math_floor(icon_h * 0.8);
-	f32 slot_x   = icon_x + icon_h + 6 * UI_SCALE();
-	f32 name_x   = (mask_slot ? slot_x + slot_h : icon_x + icon_h) + 8 * UI_SCALE();
+	f32 slot_h   = icon_h;                         // Mask slot is the same size as the layer thumbnail
+	f32 slot_x   = icon_x + icon_h + 14 * UI_SCALE(); // With a clear gap after the thumbnail
+	f32 name_x   = (mask_slot ? slot_x + slot_h : icon_x + icon_h) + 12 * UI_SCALE();
 	f32 arrow_w  = 8 * UI_SCALE(); // Right margin, the expand arrow column is gone
 	f32 arrow_x  = uix + uiw - arrow_w;
 	f32 combo_w  = uiw * (mask_slot ? 0.24 : 0.30);
@@ -521,7 +596,7 @@ void tab_layers_draw_layer_slot_full(slot_layer_t *l, i32 i) {
 	tab_layers_handle_layer_icon_state(l, i, state, uix, uiy);
 
 	if (mask_slot) {
-		tab_layers_draw_mask_slot(l, slot_x, uiy + 3 + (icon_h - slot_h) / 2.0, slot_h);
+		tab_layers_draw_mask_slot(l, slot_x, uiy + 3, slot_h, tab_layers_row_bg(uiy));
 	}
 
 	// Draw layer name
@@ -1092,7 +1167,8 @@ void tab_layers_draw_slots(bool mini) {
 }
 
 void tab_layers_highlight_odd_lines() {
-	i32 step   = g_theme->ELEMENT_H * 2;
+	_tab_layers_rows_top = g_ui->_y; // Rows are drawn from here, see tab_layers_row_bg()
+	i32 step             = g_theme->ELEMENT_H * 2;
 	i32 full_h = g_ui->_window_h - g_ui->current_window->scroll_offset;
 	for (i32 i = 0; i < math_floor(full_h / (float)step); ++i) {
 		if (i % 2 == 0) {
