@@ -19,7 +19,7 @@ void box_preferences_set_scale() {
 	f32 scale = g_config->window_scale;
 	ui_set_scale(scale);
 	ui_header_h = math_floor(ui_header_default_h * scale);
-	ui_dock_set_size(DOCK_ROLE_STATUS, ui_dock_status_expanded_h(g_config->large_asset_previews)); // Keep the Assets shelf open
+	ui_dock_set_size(DOCK_ROLE_STATUS, math_floor(ui_statusbar_default_h * scale));
 	ui_menubar_w = math_floor(ui_menubar_default_w * scale);
 	ui_base_set_icon_scale();
 	ui_dock_set_size(DOCK_ROLE_SIDEBAR, math_floor(ui_base_sidebar_default_w(g_config->large_asset_previews) * scale));

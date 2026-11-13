@@ -326,15 +326,20 @@ void ui_dock_reset() {
 	dock_default_leaf(view2d, TAB_VIEW2D);
 	dock_node_t *nodes = dock_leaf_create();
 	dock_default_leaf(nodes, TAB_NODES);
+	// Bottom strip, the Assets shelf is the last tab and the active one
 	dock_node_t *status = dock_leaf_create();
-	dock_default_leaf(status, TAB_MATERIALS); // Assets shelf
 	dock_default_leaf(status, TAB_BROWSER);
 	dock_default_leaf(status, TAB_TEXTURES);
-	dock_default_leaf(status, TAB_FONTS);
 	dock_default_leaf(status, TAB_SOUNDS);
 	dock_default_leaf(status, TAB_SWATCHES);
 	dock_default_leaf(status, TAB_TIMELINE);
 	dock_default_leaf(status, TAB_CONSOLE);
+	dock_default_leaf(status, TAB_FONTS);
+	dock_default_leaf(status, TAB_MATERIALS); // Assets shelf
+	status->active = dock_leaf_open_index(status, TAB_MATERIALS);
+	if (status->active < 0) {
+		status->active = 0;
+	}
 	dock_node_t *sidebar0 = dock_leaf_create();
 	dock_default_leaf(sidebar0, TAB_LAYERS);
 	dock_default_leaf(sidebar0, TAB_MESHES);
@@ -347,8 +352,7 @@ void ui_dock_reset() {
 
 	f32 scale     = g_config->window_scale;
 	i32 sidebar_w = math_floor(ui_base_sidebar_default_w(g_config->large_asset_previews) * scale);
-	// The bottom area opens at full height so the Assets shelf is visible, not only its tab names
-	i32 status_h = ui_dock_status_expanded_h(g_config->large_asset_previews);
+	i32 status_h  = math_floor(ui_statusbar_default_h * scale);
 	// Views take the space next to the sidebar and the toolbar
 	i32 views_w = iron_window_width() - sidebar_w - math_floor(ui_toolbar_default_w * scale);
 #if defined(IRON_IOS) || defined(IRON_ANDROID)
@@ -389,8 +393,8 @@ f32 ui_dock_get_size(i32 role) {
 // Stored in config as a version marker followed by the root node
 // split {-1, vertical, fixed, size, collapsed, role, node a, node b}, leaf {tab count, active, tab ids}
 // Raise the version (more negative) when the default layout changes: layouts saved before it are replaced by the new default once.
-// Version 1: Assets shelf open at the bottom, Properties in the lower sidebar.
-#define DOCK_LAYOUT_VERSION -101
+// Version 2: Properties first in the lower sidebar, Assets the last tab of the bottom strip, after Fonts.
+#define DOCK_LAYOUT_VERSION -102
 static void dock_save_node(i32_array_t *a, dock_node_t *n) {
 	if (dock_is_leaf(n)) {
 		i32_array_push(a, n->tab_count);
