@@ -1017,6 +1017,7 @@ void ui_draw_combo() {
 		filtered++;
 	}
 	int rows = (filtered + columns - 1) / columns;
+	bool grid_mode = columns > 1;
 
 	float combo_h =
 	    ((columns == 1 ? current->combo_selected_texts->length : rows) + (current->combo_selected_label != NULL ? 1 : 0) +
@@ -1033,7 +1034,7 @@ void ui_draw_combo() {
 	     (current->combo_search_bar ? 1 : 0)) *
 	    UI_ELEMENT_H();
 	if (unroll_up) {
-		float off = current->combo_selected_label != NULL ? UI_ELEMENT_H() / UI_SCALE() : 0.0;
+		float off = grid_mode ? UI_ELEMENT_H() : (current->combo_selected_label != NULL ? UI_ELEMENT_H() / UI_SCALE() : 0.0);
 		ui_draw_shadow(current->_x, current->_y - shadow_h - off, current->_w, shadow_h);
 	}
 	else {
@@ -1134,13 +1135,11 @@ void ui_draw_combo() {
 	float total_w                          = current->_w;
 	float column_w                         = total_w / (float)columns;
 	float grid_x                           = current->_x;
-	bool  grid_mode                        = columns > 1;
 	float grid_top                         = 0.0;
 	int   drawn                            = 0;
 	if (grid_mode) {
-		float grid_bottom = unroll_up ? current->combo_selected_y - element_h - (current->combo_search_bar ? element_h : 0.0)
-		                              : current->combo_selected_y + (current->combo_search_bar ? element_h : 0.0);
-		grid_top          = grid_bottom - rows * element_h;
+		grid_top = unroll_up ? current->combo_selected_y - element_h - (current->combo_search_bar ? element_h : 0.0) - rows * element_h
+		                     : current->combo_selected_y + (current->combo_search_bar ? element_h : 0.0);
 	}
 	for (int i = 0; i < current->combo_selected_texts->length; ++i) {
 		char str[512];
@@ -1185,6 +1184,15 @@ void ui_draw_combo() {
 			current->_y = current->combo_selected_y;
 		}
 	}
+	if (grid_mode && (drawn % columns) != 0) {
+		while ((drawn % columns) != 0) {
+			current->_x = grid_x + (drawn % columns) * column_w;
+			current->_y = grid_top + (drawn / columns) * element_h;
+			current->_w = column_w;
+			ui_fill(0, 0, current->_w / UI_SCALE(), element_h / UI_SCALE(), theme->SEPARATOR_COL);
+			drawn++;
+		}
+	}
 	if (grid_mode) {
 		current->_x = grid_x;
 		current->_w = total_w;
@@ -1211,6 +1219,9 @@ void ui_draw_combo() {
 			current->_y += UI_ELEMENT_H();
 			ui_draw_round_bottom(current->_x, current->_y - 1, current->_w);
 		}
+	}
+	else if (!unroll_up) {
+		ui_draw_round_bottom(current->_x, current->_y - 1, current->_w);
 	}
 
 	if ((current->input_released || current->input_released_r || current->is_escape_down || current->is_return_down) && !current->combo_first) {
@@ -2638,7 +2649,7 @@ void ui_combo_open(ui_id_t id, int value, string_array_t *texts, char *label, in
 	current->combo_selected_align          = align;
 	current->combo_selected_texts          = texts_copy;
 	current->combo_selected_images         = NULL;
-	current->combo_selected_label          = label != NULL ? label_copy : NULL;
+	current->combo_selected_label          = (label != NULL && label[0] != '\0') ? label_copy : NULL;
 	current->combo_selected_x              = current->_x + current->_window_x;
 	current->combo_selected_y              = current->_y + current->_window_y + UI_ELEMENT_H();
 	current->combo_selected_w              = current->_w;

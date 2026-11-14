@@ -240,7 +240,7 @@ static void bake_texture_node_button(i32 node_id) {
 		selected = 0;
 	}
 	ui_set_next_id((ui_id_t)&values->buffer[0]);
-	ui_combo_columns(&selected, bakes, tr("Bake"), false, UI_ALIGN_LEFT, true, 2);
+	ui_combo_columns(&selected, bakes, "", false, UI_ALIGN_LEFT, false, 2);
 	if (selected >= 0 && selected < bake_types->length) {
 		bake_type = bake_types->buffer[selected];
 	}
