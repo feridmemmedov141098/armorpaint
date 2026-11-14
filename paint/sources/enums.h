@@ -132,6 +132,7 @@ typedef enum {
 	FILL_TYPE_UV_ISLAND = 3,
 	FILL_TYPE_MESH      = 4,
 	FILL_TYPE_SUBMESH   = 5,
+	FILL_TYPE_POLYGON   = 6, // Face, with the two triangles of a quad picked together
 } fill_type_t;
 
 typedef enum {

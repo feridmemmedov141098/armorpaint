@@ -624,7 +624,8 @@ void render_path_paint_commands_paint(bool dilation) {
 		bool is_mask = slot_layer_is_mask(g_context->layer);
 
 		// Read texcoords from gbuffer
-		bool read_tc = (g_context->tool == TOOL_TYPE_FILL && g_context->fill_type == FILL_TYPE_FACE) || g_context->tool == TOOL_TYPE_CLONE ||
+		bool read_tc = (g_context->tool == TOOL_TYPE_FILL && (g_context->fill_type == FILL_TYPE_FACE || g_context->fill_type == FILL_TYPE_POLYGON)) ||
+		               g_context->tool == TOOL_TYPE_CLONE ||
 		               g_context->tool == TOOL_TYPE_BLUR || context_is_pixel_snap();
 
 		if (g_context->tool == TOOL_TYPE_BLUR) {

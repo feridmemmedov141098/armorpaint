@@ -1582,7 +1582,7 @@ void tab_layers_new_mask(i32 type) {
 // Fill Mode in the header switches to UV Island or Mesh, the Eraser takes parts away again.
 static void tab_layers_geometry_mask_next_frame(void *_) {
 	context_select_tool(TOOL_TYPE_FILL);
-	g_context->fill_type   = FILL_TYPE_FACE;
+	g_context->fill_type   = FILL_TYPE_POLYGON;
 	gpu_texture_t *current = _draw_current;
 	bool           in_use  = gpu_in_use;
 	if (in_use) {
@@ -1594,7 +1594,7 @@ static void tab_layers_geometry_mask_next_frame(void *_) {
 	}
 	make_material_parse_paint_material(true);
 	make_material_parse_mesh_material();
-	console_info(tr("Geometry mask: click faces to add them, Fill Mode in the header picks UV Islands or the whole Mesh"));
+	console_info(tr("Geometry mask: click polygons to add them, Fill Mode in the header picks Faces, UV Islands or the whole Mesh"));
 }
 
 void tab_layers_new_geometry_mask(void) {

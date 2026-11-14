@@ -575,11 +575,12 @@ void ui_header_draw_tool_properties() {
 			        tr("UV Island"),
 			        tr("Mesh"),
 			        tr("Submesh"),
+			        tr("Polygon"),
 			    },
-			    6);
+			    7);
 			ui_combo(&g_context->fill_type, fill_mode_combo, tr("Fill Mode"), false, UI_ALIGN_LEFT, true);
 			if (ui_item_changed()) {
-				if (g_context->fill_type == FILL_TYPE_FACE) {
+				if (g_context->fill_type == FILL_TYPE_FACE || g_context->fill_type == FILL_TYPE_POLYGON) {
 					gpu_texture_t *current = _draw_current;
 					draw_end();
 					// cache_uv_map();

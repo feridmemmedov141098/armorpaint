@@ -242,7 +242,7 @@ node_shader_context_t *make_paint_run_context(material_t *data, char *context_id
 		return con_paint;
 	}
 
-	bool face_fill      = g_context->tool == TOOL_TYPE_FILL && g_context->fill_type == FILL_TYPE_FACE;
+	bool face_fill      = g_context->tool == TOOL_TYPE_FILL && (g_context->fill_type == FILL_TYPE_FACE || g_context->fill_type == FILL_TYPE_POLYGON);
 	bool uv_island_fill = g_context->tool == TOOL_TYPE_FILL && g_context->fill_type == FILL_TYPE_UV_ISLAND;
 	bool decal          = context_is_decal();
 

@@ -48,7 +48,55 @@ void util_uv_cache_uv_map() {
 	draw_end();
 }
 
+// Polygon fill: triangle i joins the next one when they share an edge and lie in one plane, the two triangles of a quad.
+// Importers triangulate quads into neighbouring triangles, so this finds them without an edge map.
+static bool util_uv_polygon_built = false; // The triangle map holds polygon ids instead of triangle ids
+
+static void util_uv_tri_normal(i16_array_t *pos, u32_array_t *ind, i32 t, f32 *n) {
+	f32 p[3][3];
+	for (i32 k = 0; k < 3; ++k) {
+		u32 v = ind->buffer[t * 3 + k];
+		for (i32 c = 0; c < 3; ++c) {
+			p[k][c] = pos->buffer[v * 4 + c];
+		}
+	}
+	f32 a[3] = {p[1][0] - p[0][0], p[1][1] - p[0][1], p[1][2] - p[0][2]};
+	f32 b[3] = {p[2][0] - p[0][0], p[2][1] - p[0][1], p[2][2] - p[0][2]};
+	n[0]     = a[1] * b[2] - a[2] * b[1];
+	n[1]     = a[2] * b[0] - a[0] * b[2];
+	n[2]     = a[0] * b[1] - a[1] * b[0];
+	f32 l    = sqrtf(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+	if (l > 0) {
+		n[0] /= l;
+		n[1] /= l;
+		n[2] /= l;
+	}
+}
+
+static bool util_uv_tris_quad(i16_array_t *pos, u32_array_t *ind, i32 a, i32 b) {
+	i32 shared = 0;
+	for (i32 i = 0; i < 3; ++i) {
+		for (i32 j = 0; j < 3; ++j) {
+			if (ind->buffer[a * 3 + i] == ind->buffer[b * 3 + j]) {
+				shared++;
+			}
+		}
+	}
+	if (shared != 2) {
+		return false;
+	}
+	f32 na[3];
+	f32 nb[3];
+	util_uv_tri_normal(pos, ind, a, na);
+	util_uv_tri_normal(pos, ind, b, nb);
+	return na[0] * nb[0] + na[1] * nb[1] + na[2] * nb[2] > 0.999;
+}
+
 void util_uv_cache_triangle_map() {
+	bool polygon = g_context->fill_type == FILL_TYPE_POLYGON;
+	if (util_uv_polygon_built != polygon) {
+		util_uv_trianglemap_cached = false;
+	}
 	if (util_uv_trianglemap != NULL &&
 	    (util_uv_trianglemap->width != config_get_texture_res_x() || util_uv_trianglemap->height != config_get_texture_res_y())) {
 		gpu_delete_texture(util_uv_trianglemap);
@@ -65,17 +113,25 @@ void util_uv_cache_triangle_map() {
 	}
 
 	util_uv_trianglemap_cached = true;
+	util_uv_polygon_built      = polygon;
 	mesh_data_t *merged        = g_context->merged_object != NULL ? g_context->merged_object->data : g_context->paint_object->data;
 	mesh_data_t *mesh          = merged;
 	i16_array_t *texa          = mesh->vertex_arrays->buffer[2]->values;
+	i16_array_t *posa          = mesh->vertex_arrays->buffer[0]->values;
 	u32_array_t *inda          = mesh->index_array;
 	draw_begin(util_uv_trianglemap, true, 0xff000000);
-	f32 f     = (1 / 32767.0) * util_uv_trianglemap->width;
-	i32 color = 0xff000001;
-	for (i32 i = 0; i < math_floor(inda->length / 3.0); ++i) {
-		if (color == 0xffffffff)
-			color = 0xff000001;
-		color++;
+	f32  f      = (1 / 32767.0) * util_uv_trianglemap->width;
+	i32  color  = 0xff000001;
+	bool joined = false; // Triangle i is the second half of a quad, it keeps the color of i - 1
+	i32  count  = math_floor(inda->length / 3.0);
+	for (i32 i = 0; i < count; ++i) {
+		if (!joined) {
+			if (color == 0xffffffff)
+				color = 0xff000001;
+			color++;
+		}
+		bool next = polygon && !joined && i + 1 < count && util_uv_tris_quad(posa, inda, i, i + 1);
+		joined    = next;
 		draw_set_color(color);
 		f32 x1 = (texa->buffer[inda->buffer[i * 3] * 2]) * f;
 		f32 x2 = (texa->buffer[inda->buffer[i * 3 + 1] * 2]) * f;
