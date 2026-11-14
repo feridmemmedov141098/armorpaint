@@ -177,6 +177,7 @@
 #include "ui/box_preferences.c"
 #include "ui/box_projects.c"
 #include "ui/tab_browser.c"
+#include "ui/ui_library.c"
 #include "ui/tab_brushes.c"
 #include "ui/tab_console.c"
 #include "ui/tab_debug.c"

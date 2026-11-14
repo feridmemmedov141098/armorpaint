@@ -343,6 +343,37 @@ static void tab_alphas_apply(void *_) {
 
 static i32 tab_textures_import_kind = 0;
 
+// Alphas library: data/library/alphas, picking one imports it into the project and sets it as the brush alpha
+static i32   tab_alphas_library_section = 0;
+static char *_tab_alphas_library_pick   = NULL;
+
+static void tab_alphas_pick_library(void *_) {
+	char *path = _tab_alphas_library_pick;
+	import_texture_run(path, false); // An already imported file is kept as it is
+	for (i32 i = 0; i < g_project->_->assets->length; ++i) {
+		asset_t *a = g_project->_->assets->buffer[i];
+		if (string_equals(a->file, path)) {
+			tab_alphas_selected = tab_alphas_selected == a ? NULL : a;
+			tab_alphas_apply(NULL);
+			break;
+		}
+	}
+}
+
+static void tab_alphas_draw_library() {
+	ui_separator(3, false);
+	string_array_t *sections = any_array_create_from_raw((void *[]){tr("Alphas"), tr("Masks"), tr("Shapes")}, 3);
+	char           *dirs[]   = {"alphas" PATH_SEP "Alphas", "alphas" PATH_SEP "Masks", "alphas" PATH_SEP "Shapes"};
+	ui_set_next_id((ui_id_t)&tab_alphas_library_section);
+	ui_inline_radio(&tab_alphas_library_section, sections, UI_ALIGN_LEFT);
+	string_array_t *files  = ui_library_list(dirs[tab_alphas_library_section], ".jpg");
+	char           *picked = ui_library_draw_grid(files, tab_alphas_active() ? tab_alphas_selected->file : NULL);
+	if (picked != NULL) {
+		_tab_alphas_library_pick = string_copy(picked);
+		sys_notify_on_next_frame(&tab_alphas_pick_library, NULL);
+	}
+}
+
 void tab_textures_draw_import(char *path) {
 	if (tab_textures_import_kind == 1) {
 		if (tab_alphas_files == NULL) {
@@ -565,13 +596,17 @@ static void tab_textures_draw_kind(i32 *htab, i32 kind, char *title) {
 				tab_textures_drag_pos = -1;
 			}
 		}
-		else {
+		else if (kind != 1) { // Alphas show the library instead
 			gpu_texture_t *img = resource_get("icons.k");
 			rect_t        *r   = resource_tile50(img, ICON_DROP);
 			ui_sub_image(img, g_theme->BUTTON_COL, r->h, r->x, r->y, r->w, r->h);
 			if (g_ui->is_hovered) {
 				ui_tooltip(tr("Drag and drop files here"));
 			}
+		}
+
+		if (kind == 1) {
+			tab_alphas_draw_library();
 		}
 
 		bool in_focus = g_ui->input_x > g_ui->_window_x && g_ui->input_x < g_ui->_window_x + g_ui->_window_w && g_ui->input_y > g_ui->_window_y &&

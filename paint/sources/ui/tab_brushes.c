@@ -4,6 +4,24 @@
 i32 _tab_brushes_draw_i;
 i32         tab_brushes_drag_pos = -1;
 static bool tab_brushes_in_shelf = false;
+static char *_tab_brushes_library_pick = NULL;
+
+static void tab_brushes_pick_library(void *_) {
+	char *name = ui_library_name(_tab_brushes_library_pick);
+	for (i32 i = 0; i < g_project->_->brushes->length; ++i) {
+		if (string_equals(g_project->_->brushes->buffer[i]->canvas->name, name)) {
+			context_select_brush(i);
+			return;
+		}
+	}
+	i32 count = g_project->_->brushes->length;
+	import_arm_run_brush(_tab_brushes_library_pick);
+	if (g_project->_->brushes->length > count) {
+		slot_brush_t *b = g_project->_->brushes->buffer[g_project->_->brushes->length - 1];
+		b->canvas->name = string_copy(name); // Found again by name on the next pick
+		context_select_brush(g_project->_->brushes->length - 1);
+	}
+}
 
 void tab_brushes_draw_make_brush_preview(void *_) {
 	i32           i      = _tab_brushes_draw_i;
@@ -263,6 +281,15 @@ void tab_brushes_draw(i32 *htab) {
 
 		if (!tab_brushes_in_shelf) {
 			ui_node_params_draw(CANVAS_TYPE_BRUSH, &g_config->brush_params);
+		}
+		else { // Library brushes, picking one adds it to the project (or selects it when already added)
+			ui_separator(3, false);
+			ui_text(tr("Library"), UI_ALIGN_LEFT, 0);
+			char *picked = ui_library_draw_grid(ui_library_list("brushes", ".arm"), NULL);
+			if (picked != NULL) {
+				_tab_brushes_library_pick = string_copy(picked);
+				sys_notify_on_next_frame(&tab_brushes_pick_library, NULL);
+			}
 		}
 	}
 }
