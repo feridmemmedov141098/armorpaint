@@ -1545,7 +1545,7 @@ void ui_node_canvas(ui_nodes_t *nodes, ui_node_canvas_t *canvas) {
 		}
 	}
 
-	// Select all nodes with A, like Blender (ctrl+a adds a node)
+	// Select all nodes with A, like Blender (shift+a adds a node)
 	if (current->input_enabled && current->is_key_pressed && !current->is_ctrl_down && !current->is_shift_down && !current->is_alt_down &&
 	    current->key_code == KEY_CODE_A && !current->is_typing && ui_input_in_rect(current->_window_x, current->_window_y, current->_window_w, current->_window_h)) {
 		current_nodes->nodes_selected_id->length = 0;
