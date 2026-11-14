@@ -56,6 +56,10 @@ char *parser_material_texture_store(ui_node_t *node, bind_tex_t *tex, char *tex_
 	else {
 		uv_name = string_copy(parser_material_tex_coord);
 	}
+	bool baked = string_equals(node->type, "TEX_BAKE") && parser_material_mesh_uv; // Baked maps follow the mesh UVs
+	if (baked) {
+		uv_name = "tex_coord_uv";
+	}
 	char *tex_store = parser_material_store_var_name(node);
 	if (parser_material_sample_keep_aspect) {
 		node_shader_add_constant(parser_material_kong, string_tmp("float2 %s_size", tex_name), string_tmp("_size(%s)", tex_name));
@@ -71,7 +75,7 @@ char *parser_material_texture_store(ui_node_t *node, bind_tex_t *tex, char *tex_
 		parser_material_write(parser_material_kong, string_tmp("%s_uv = %s_uv * float(%s);", tex_store, tex_store, parser_material_sample_uv_scale));
 		uv_name = string_tmp("%s_uv", tex_store);
 	}
-	if (parser_material_triplanar) {
+	if (parser_material_triplanar && !baked) {
 		if (!string_equals(uv_name, parser_material_tex_coord)) {
 			parser_material_write(parser_material_kong, string_tmp("float3 %s1 = %s;", uv_name, uv_name));
 			parser_material_write(parser_material_kong, string_tmp("float3 %s2 = %s;", uv_name, uv_name));

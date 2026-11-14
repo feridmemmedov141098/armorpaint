@@ -5,7 +5,8 @@ char *curvature_bake_node_value(ui_node_t *node, ui_node_socket_t *socket) {
 	char *tex_name = string_tmp("texbake_%s", make_material_node_preview_id(node, NULL));
 	node_shader_add_texture(parser_material_kong, tex_name, string_tmp("_%s", tex_name));
 	char *store = parser_material_store_var_name(node);
-	parser_material_write(parser_material_kong, string_tmp("float %s_res = sample(%s, sampler_linear, tex_coord).r;", store, tex_name));
+	char *uv    = parser_material_mesh_uv ? "tex_coord_uv" : "tex_coord"; // Baked on the mesh UVs, whatever the projection
+	parser_material_write(parser_material_kong, string_tmp("float %s_res = sample(%s, sampler_linear, %s).r;", store, tex_name, uv));
 	return string_tmp("%s_res", store);
 }
 

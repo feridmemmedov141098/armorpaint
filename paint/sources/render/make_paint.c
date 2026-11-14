@@ -427,6 +427,7 @@ node_shader_context_t *make_paint_run_context(material_t *data, char *context_id
 		parser_material_sample_uv_scale    = is_atlas ? "1.0" : "constants.brush_scale";
 		shader_out_t *sout                 = parser_material_parse(g_context->material->canvas, con_paint, kong);
 		parser_material_uv_coord           = false;
+		parser_material_mesh_uv            = false;
 		parser_material_parse_emission     = false;
 		parser_material_parse_subsurface   = false;
 		parser_material_parse_height       = false;

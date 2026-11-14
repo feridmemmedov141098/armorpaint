@@ -15,6 +15,13 @@ void make_texcoord_run(node_shader_t *kong, bool is_atlas) {
 		scale = "constants.brush_scale";
 	}
 
+	// Mesh UVs for nodes that read baked maps (Bake Texture, Curvature): they stay on the UVs whatever the projection or UV scale
+	node_shader_context_add_elem(kong->context, "tex", "short2norm");
+	node_shader_add_out(kong, "float2 tex_coord_uv");
+	node_shader_write_vert(kong, "output.tex_coord_uv = input.tex;");
+	node_shader_write_attrib_frag(kong, "float2 tex_coord_uv = input.tex_coord_uv;");
+	parser_material_mesh_uv = true;
+
 	if (uv_type == UV_TYPE_PROJECT || decal) { // TexCoords - project
 		node_shader_write_attrib_frag(kong, "float2 uvsp = sp.xy;");
 
