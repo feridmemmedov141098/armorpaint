@@ -334,6 +334,92 @@ void ui_remove_node(ui_node_t *n, ui_node_canvas_t *canvas) {
 	}
 }
 
+// Auto-connect, like Blender: sockets connect when their types match exactly (RGBA, VALUE, VECTOR, SHADER)
+static bool ui_sockets_match(ui_node_socket_t *a, ui_node_socket_t *b) {
+	return a != NULL && b != NULL && a->type != NULL && b->type != NULL && strcmp(a->type, b->type) == 0;
+}
+
+static ui_node_socket_t *ui_link_from_socket(ui_node_canvas_t *canvas, ui_node_link_t *l) {
+	ui_node_t *n = ui_get_node(canvas->nodes, l->from_id);
+	return n != NULL && l->from_socket >= 0 && l->from_socket < n->outputs->length ? n->outputs->buffer[l->from_socket] : NULL;
+}
+
+static ui_node_socket_t *ui_link_to_socket(ui_node_canvas_t *canvas, ui_node_link_t *l) {
+	ui_node_t *n = ui_get_node(canvas->nodes, l->to_id);
+	return n != NULL && l->to_socket >= 0 && l->to_socket < n->inputs->length ? n->inputs->buffer[l->to_socket] : NULL;
+}
+
+static void ui_add_link(ui_node_canvas_t *canvas, int from_id, int from_socket, int to_id, int to_socket) {
+	ui_node_link_t *l = (ui_node_link_t *)malloc(sizeof(ui_node_link_t));
+	l->id             = ui_next_link_id(canvas->links);
+	l->from_id        = from_id;
+	l->from_socket    = from_socket;
+	l->to_id          = to_id;
+	l->to_socket      = to_socket;
+	any_array_push(canvas->links, l);
+}
+
+// Before a node is deleted: link what fed it to what it fed, where the socket types match
+static void ui_reconnect_around(ui_node_canvas_t *canvas, ui_node_t *n) {
+	int count = canvas->links->length;
+	for (int i = 0; i < count; ++i) {
+		ui_node_link_t *out = canvas->links->buffer[i];
+		if (out->from_id != n->id || out->to_id == n->id || out->to_id == -1) {
+			continue;
+		}
+		ui_node_socket_t *ts = ui_link_to_socket(canvas, out);
+		for (int j = 0; j < count; ++j) {
+			ui_node_link_t *in = canvas->links->buffer[j];
+			if (in->to_id != n->id || in->from_id == n->id || in->from_id == -1) {
+				continue;
+			}
+			if (ui_sockets_match(ui_link_from_socket(canvas, in), ts)) {
+				ui_add_link(canvas, in->from_id, in->from_socket, out->to_id, out->to_socket);
+				break;
+			}
+		}
+	}
+}
+
+// Point of the drawn link curve at t
+static void ui_link_point(float x1, float y1, float x2, float y2, float t, float *x, float *y) {
+	if (ui_get_current()->ops->theme->LINK_STYLE == UI_LINK_STYLE_LINE) {
+		*x = x1 + (x2 - x1) * t;
+		*y = y1 + (y2 - y1) * t;
+		return;
+	}
+	float d  = fabs(x1 - x2) / 2.0;
+	float px[] = {x1, x1 + d, x2 - d, x2};
+	float py[] = {y1, y1, y2, y2};
+	float u  = 1.0 - t;
+	float b0 = u * u * u, b1 = 3 * u * u * t, b2 = 3 * u * t * t, b3 = t * t * t;
+	*x       = b0 * px[0] + b1 * px[1] + b2 * px[2] + b3 * px[3];
+	*y       = b0 * py[0] + b1 * py[1] + b2 * py[2] + b3 * py[3];
+}
+
+// Soft glow along a link, in the color of its socket
+static void ui_draw_link_glow(float x1, float y1, float x2, float y2, uint32_t color) {
+	float widths[] = {7.0, 4.0};
+	int   alphas[] = {45, 110};
+	for (int k = 0; k < 2; ++k) {
+		draw_set_color(ui_color(ui_color_r(color), ui_color_g(color), ui_color_b(color), alphas[k]));
+		float lx = x1, ly = y1;
+		for (int s = 1; s <= 30; ++s) {
+			float x, y;
+			ui_link_point(x1, y1, x2, y2, s / 30.0, &x, &y);
+			draw_line_aa(lx, ly, x, y, widths[k] * UI_SCALE());
+			lx = x;
+			ly = y;
+		}
+	}
+}
+
+// Node dragged over a link it can be placed into
+static int ui_insert_link_id = -1;
+static int ui_insert_node_id = -1;
+static int ui_insert_in      = -1;
+static int ui_insert_out     = -1;
+
 bool ui_is_selected(ui_node_t *node) {
 	for (int i = 0; i < current_nodes->nodes_selected_id->length; ++i) {
 		if (current_nodes->nodes_selected_id->buffer[i] == node->id) {
@@ -896,6 +982,85 @@ void ui_node_canvas(ui_nodes_t *nodes, ui_node_canvas_t *canvas) {
 	current->elements_baked = true;
 	draw_set_font(current->ops->font, current->font_size);
 
+	// A single unlinked node dragged over a link: find the link it can be placed into
+	ui_insert_link_id = -1;
+	if (current_nodes->nodes_drag && current_nodes->dragged && current_nodes->nodes_selected_id->length == 1 && current_nodes->link_drag_id == -1) {
+		ui_node_t *dn     = ui_get_node(canvas->nodes, current_nodes->nodes_selected_id->buffer[0]);
+		bool       linked = false;
+		for (int i = 0; i < canvas->links->length && dn != NULL; ++i) {
+			ui_node_link_t *l = canvas->links->buffer[i];
+			if (l->from_id == dn->id || l->to_id == dn->id) {
+				linked = true;
+				break;
+			}
+		}
+		if (dn != NULL && !linked && !(dn->flags & UI_NODE_FLAG_COLLAPSED)) {
+			float nx = wx + UI_NODE_X(dn);
+			float ny = wy + UI_NODE_Y(dn);
+			float nw = UI_NODE_W(dn);
+			float nh = UI_NODE_H(canvas, dn);
+			for (int i = 0; i < canvas->links->length && ui_insert_link_id == -1; ++i) {
+				ui_node_link_t *l    = canvas->links->buffer[i];
+				ui_node_t      *from = ui_get_node(canvas->nodes, l->from_id);
+				ui_node_t      *to   = ui_get_node(canvas->nodes, l->to_id);
+				if (from == NULL || to == NULL) {
+					continue;
+				}
+				float x1  = wx + UI_NODE_X(from) + UI_NODE_W(from);
+				float y1  = wy + UI_NODE_Y(from) + UI_OUTPUT_Y(from, l->from_socket);
+				float x2  = wx + UI_NODE_X(to);
+				float y2  = wy + UI_NODE_Y(to) + UI_INPUT_Y(canvas, to, l->to_socket) + UI_OUTPUTS_H(to, -1) + UI_BUTTONS_H(to);
+				bool  hit = false;
+				for (int s = 1; s < 30 && !hit; ++s) {
+					float x, y;
+					ui_link_point(x1, y1, x2, y2, s / 30.0, &x, &y);
+					hit = x > nx && x < nx + nw && y > ny && y < ny + nh;
+				}
+				if (!hit) {
+					continue;
+				}
+				ui_node_socket_t *fs  = ui_link_from_socket(canvas, l);
+				ui_node_socket_t *ts  = ui_link_to_socket(canvas, l);
+				int               in  = -1;
+				int               out = -1;
+				for (int k = 0; k < dn->inputs->length && in == -1; ++k) {
+					if (ui_sockets_match(fs, dn->inputs->buffer[k])) {
+						in = k;
+					}
+				}
+				for (int k = 0; k < dn->outputs->length && out == -1; ++k) {
+					if (ui_sockets_match(dn->outputs->buffer[k], ts)) {
+						out = k;
+					}
+				}
+				if (in != -1 && out != -1) {
+					ui_insert_link_id = l->id;
+					ui_insert_node_id = dn->id;
+					ui_insert_in      = in;
+					ui_insert_out     = out;
+				}
+			}
+		}
+	}
+
+	// Dropped into the link: from -> node -> to
+	if (current->input_released && ui_insert_link_id != -1) {
+		ui_node_link_t *l = ui_get_link(canvas->links, ui_insert_link_id);
+		if (l != NULL) {
+			int to_id    = l->to_id;
+			int to_sock  = l->to_socket;
+			l->to_id     = ui_insert_node_id;
+			l->to_socket = ui_insert_in;
+			ui_add_link(canvas, ui_insert_node_id, ui_insert_out, to_id, to_sock);
+			current->changed = true;
+			if (ui_nodes_on_node_changed != NULL) {
+				ui_nodes_on_node_changed(ui_get_node(canvas->nodes, ui_insert_node_id));
+				ui_nodes_on_node_changed(ui_get_node(canvas->nodes, to_id));
+			}
+		}
+		ui_insert_link_id = -1;
+	}
+
 	for (int i = 0; i < canvas->links->length; ++i) {
 		ui_node_link_t *link   = canvas->links->buffer[i];
 		ui_node_t      *from   = ui_get_node(canvas->nodes, link->from_id);
@@ -977,6 +1142,10 @@ void ui_node_canvas(ui_nodes_t *nodes, ui_node_canvas_t *canvas) {
 			}
 		}
 
+		if (link->id == ui_insert_link_id) {
+			ui_node_socket_t *fs = ui_link_from_socket(canvas, link);
+			ui_draw_link_glow(from_x - wx, from_y - wy, to_x - wx, to_y - wy, fs != NULL ? fs->color : 0xffffffff);
+		}
 		ui_draw_link(from_x - wx, from_y - wy, to_x - wx, to_y - wy, selected);
 	}
 
@@ -1147,6 +1316,25 @@ void ui_node_canvas(ui_nodes_t *nodes, ui_node_canvas_t *canvas) {
 		}
 
 		ui_node_draw(node, canvas);
+
+		// Glow on the sockets the dragged node will connect with
+		if (ui_insert_link_id != -1 && node->id == ui_insert_node_id) {
+			ui_node_socket_t *si = node->inputs->buffer[ui_insert_in];
+			ui_node_socket_t *so = node->outputs->buffer[ui_insert_out];
+			float             ix = UI_NODE_X(node);
+			float             iy = UI_NODE_Y(node) + UI_INPUT_Y(canvas, node, ui_insert_in) + UI_OUTPUTS_H(node, -1) + UI_BUTTONS_H(node);
+			float             ox = UI_NODE_X(node) + UI_NODE_W(node);
+			float             oy = UI_NODE_Y(node) + UI_OUTPUT_Y(node, ui_insert_out);
+			for (int k = 0; k < 2; ++k) {
+				float r = (k == 0 ? 10.0 : 6.5) * UI_SCALE();
+				int   a = k == 0 ? 50 : 110;
+				draw_set_color(ui_color(ui_color_r(si->color), ui_color_g(si->color), ui_color_b(si->color), a));
+				draw_filled_circle(ix, iy, r, 0);
+				draw_set_color(ui_color(ui_color_r(so->color), ui_color_g(so->color), ui_color_b(so->color), a));
+				draw_filled_circle(ox, oy, r, 0);
+			}
+			draw_set_color(0xffffffff);
+		}
 	}
 
 	if (ui_nodes_on_canvas_released != NULL && current->input_enabled && (current->input_released || current->input_released_r) && !ui_nodes_socket_released) {
@@ -1357,8 +1545,9 @@ void ui_node_canvas(ui_nodes_t *nodes, ui_node_canvas_t *canvas) {
 		}
 	}
 
-	// Select all nodes
-	if (current->is_ctrl_down && current->key_code == KEY_CODE_A && !current->is_typing) {
+	// Select all nodes with A, like Blender (ctrl+a adds a node)
+	if (current->input_enabled && current->is_key_pressed && !current->is_ctrl_down && !current->is_shift_down && !current->is_alt_down &&
+	    current->key_code == KEY_CODE_A && !current->is_typing && ui_input_in_rect(current->_window_x, current->_window_y, current->_window_w, current->_window_h)) {
 		current_nodes->nodes_selected_id->length = 0;
 		for (int i = 0; i < canvas->nodes->length; ++i) {
 			add_to_selection(canvas->nodes->buffer[i]);
@@ -1366,7 +1555,9 @@ void ui_node_canvas(ui_nodes_t *nodes, ui_node_canvas_t *canvas) {
 	}
 
 	// Node removal
-	bool node_removal = current->input_enabled && (current->is_backspace_down || current->is_delete_down) && !current->is_typing;
+	bool x_pressed = current->is_key_pressed && current->key_code == KEY_CODE_X && !current->is_ctrl_down && !current->is_shift_down && !current->is_alt_down &&
+	                 ui_input_in_rect(current->_window_x, current->_window_y, current->_window_w, current->_window_h);
+	bool node_removal = current->input_enabled && (current->is_backspace_down || current->is_delete_down || x_pressed) && !current->is_typing;
 	if (node_removal || cut_selected) {
 		int i = current_nodes->nodes_selected_id->length - 1;
 		while (i >= 0) {
@@ -1375,6 +1566,9 @@ void ui_node_canvas(ui_nodes_t *nodes, ui_node_canvas_t *canvas) {
 			if (ui_is_node_type_excluded(n->type)) {
 				n->flags ^= UI_NODE_FLAG_COLLAPSED;
 				continue;
+			}
+			if (node_removal) {
+				ui_reconnect_around(canvas, n);
 			}
 			ui_remove_node(n, canvas);
 			current->changed = true;
