@@ -133,6 +133,65 @@ void project_new_resize_layers(void *_) {
 	layers_resize();
 }
 
+static ui_node_t *project_smart_mask_node(slot_material_t *m, char *type, f32 x, f32 y) {
+	ui_node_t *n = ui_nodes_make_node(nodes_material_get_node_t(type), m->nodes, m->canvas);
+	n->x         = x;
+	n->y         = y;
+	any_array_push(m->canvas->nodes, n);
+	return n;
+}
+
+// Curvature broken up by noise drives the opacity: edge wear on convex edges, dirt in the cavities (inverted curvature)
+static slot_material_t *project_make_smart_mask(char *name, bool dirt) {
+	nodes_material_init();
+	slot_material_t *m = slot_material_create(g_project->_->materials->buffer[0]->data, NULL);
+	m->canvas->name    = name;
+	slot_material_set_base_white(m);
+	ui_node_t *out = NULL;
+	for (i32 i = 0; i < m->canvas->nodes->length; ++i) {
+		if (string_equals(m->canvas->nodes->buffer[i]->type, "OUTPUT_MATERIAL_PBR")) {
+			out = m->canvas->nodes->buffer[i];
+		}
+	}
+	if (out == NULL) {
+		return m;
+	}
+	ui_node_link_t_array_t *links = m->canvas->links;
+	ui_node_t *curv = project_smart_mask_node(m, "BAKE_CURVATURE", out->x - 660, out->y);
+	curv->buttons->buffer[0]->default_value->buffer[0] = dirt ? 0.0 : 1.0; // Convex only for edges
+	ui_node_t *src = curv;
+	if (dirt) { // 1 - curvature
+		ui_node_t *inv = project_smart_mask_node(m, "MATH", out->x - 440, out->y - 120);
+		inv->buttons->buffer[0]->default_value->buffer[0] = 1; // Subtract
+		inv->inputs->buffer[0]->default_value->buffer[0]  = 1.0;
+		any_array_push(links, project_create_node_link(links, curv->id, 0, inv->id, 1));
+		src = inv;
+	}
+	ui_node_t *noise = project_smart_mask_node(m, "TEX_NOISE", out->x - 440, out->y + 120);
+	noise->inputs->buffer[1]->default_value->buffer[0] = dirt ? 4.0 : 12.0; // Scale
+	ui_node_t *mul = project_smart_mask_node(m, "MATH", out->x - 220, out->y);
+	mul->buttons->buffer[0]->default_value->buffer[0] = 2; // Multiply
+	if (mul->buttons->length > 1) {
+		mul->buttons->buffer[1]->default_value->buffer[0] = 1; // Clamp
+	}
+	any_array_push(links, project_create_node_link(links, src->id, 0, mul->id, 0));
+	any_array_push(links, project_create_node_link(links, noise->id, 0, mul->id, 1));
+	any_array_push(links, project_create_node_link(links, mul->id, 0, out->id, 1)); // Opacity: a smart mask
+	return m;
+}
+
+static void project_smart_mask_previews(void *_) {
+	slot_material_t *current = g_context->material;
+	for (i32 i = 0; i < g_project->_->materials->length; ++i) {
+		slot_material_t *m = g_project->_->materials->buffer[i];
+		if (!m->preview_ready && slot_material_is_smart_mask(m)) {
+			context_set_material(m);
+			util_render_make_material_preview();
+		}
+	}
+	context_set_material(current);
+}
+
 void project_new(bool reset_layers) {
 	if (g_context->paint_object != NULL) {
 		project_cleanup();
@@ -196,6 +255,9 @@ void project_new(bool reset_layers) {
 		slot_material_unload(array_pop(g_project->_->materials));
 	}
 	any_array_push(g_project->_->materials, slot_material_create(m, NULL));
+	any_array_push(g_project->_->materials, project_make_smart_mask("Edge Wear Mask", false));
+	any_array_push(g_project->_->materials, project_make_smart_mask("Dirt Mask", true));
+	sys_notify_on_next_frame(&project_smart_mask_previews, NULL);
 	tab_meshes_reset_overrides();
 
 	g_context->picker_material_mask        = false;
