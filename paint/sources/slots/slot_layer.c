@@ -1024,6 +1024,16 @@ bool slot_layer_can_move_into_group(slot_layer_t *raw, slot_layer_t *group) {
 	       !slot_layer_is_descendant(group, raw) && array_index_of(g_project->_->layers, raw) >= 0 && array_index_of(g_project->_->layers, group) >= 0;
 }
 
+// Grouping several layers: raw goes to the bottom of group, below everything already in it
+void slot_layer_move_to_group_bottom(slot_layer_t *raw, slot_layer_t *group) {
+	if (!slot_layer_can_move_into_group(raw, group) || raw->parent == group) {
+		return;
+	}
+	i32 gi     = array_index_of(g_project->_->layers, group);
+	i32 bottom = gi - slot_layer_count_descendants(group);
+	slot_layer_move_apply(raw, group, bottom); // Just below the bottom row of the folder (the folder itself when empty)
+}
+
 // Dropped on a folder row: the layer becomes the top child of that folder, and the folder opens
 void slot_layer_move_into_group(slot_layer_t *raw, slot_layer_t *group) {
 	if (!slot_layer_can_move_into_group(raw, group)) {

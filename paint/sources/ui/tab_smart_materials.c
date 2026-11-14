@@ -52,8 +52,18 @@ typedef struct smart_material_entry {
 
 static any_array_t *smart_materials = NULL;
 
+// Kept in the app's library (data/library/smart_materials), next to the alphas and brushes, for every project.
+// Older builds saved to data/smart_materials, that folder is moved over once.
 static char *smart_materials_dir() {
-	return string("%ssmart_materials", data_path());
+	char *dir = string("%slibrary%ssmart_materials", data_path(), PATH_SEP);
+	if (!iron_is_directory(dir)) {
+		char *old = string("%ssmart_materials", data_path());
+		iron_create_directory(string("%slibrary", data_path()));
+		if (!iron_is_directory(old) || rename(old, dir) != 0) {
+			iron_create_directory(dir);
+		}
+	}
+	return dir;
 }
 
 static char *smart_material_files_dir(char *file) {
@@ -77,7 +87,7 @@ static void smart_materials_load() {
 	}
 	smart_materials = any_array_create(0);
 	char *dir       = smart_materials_dir();
-	if (!iron_file_exists(dir)) {
+	if (!iron_is_directory(dir)) { // iron_file_exists is false for a folder: nothing was listed after a restart
 		return;
 	}
 	any_array_t *files = file_read_directory(dir);

@@ -25,6 +25,170 @@ void tab_layers_repaint_text_layer(slot_layer_t *l) {
 	g_context->layers_preview_dirty = true;
 }
 
+// Multi-selection on top of the current layer (g_context->layer): Ctrl+click toggles a layer, Shift+click adds the range.
+// Each entry keeps the time it was selected, its highlight fades and slides in from that moment.
+#define TAB_LAYERS_SEL_MAX 128
+static slot_layer_t *tab_layers_sel[TAB_LAYERS_SEL_MAX];
+static f32           tab_layers_sel_time[TAB_LAYERS_SEL_MAX];
+static i32           tab_layers_sel_count = 0;
+static slot_layer_t *tab_layers_cur_last  = NULL; // Current layer of the last frame, its highlight animates on change
+static f32           tab_layers_cur_time  = 0.0;
+static i32           tab_layers_rename_pending = -1; // Layer id whose name opens for typing on its next draw (a new folder)
+
+static bool tab_layers_slot_hidden(slot_layer_t *l);
+
+static i32 tab_layers_sel_index(slot_layer_t *l) {
+	for (i32 i = 0; i < tab_layers_sel_count; ++i) {
+		if (tab_layers_sel[i] == l) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+static void tab_layers_sel_add(slot_layer_t *l) {
+	if (l == NULL || tab_layers_sel_index(l) >= 0 || tab_layers_sel_count >= TAB_LAYERS_SEL_MAX) {
+		return;
+	}
+	tab_layers_sel[tab_layers_sel_count]      = l;
+	tab_layers_sel_time[tab_layers_sel_count] = sys_time();
+	tab_layers_sel_count++;
+}
+
+static void tab_layers_sel_remove(slot_layer_t *l) {
+	i32 i = tab_layers_sel_index(l);
+	if (i < 0) {
+		return;
+	}
+	for (; i < tab_layers_sel_count - 1; ++i) {
+		tab_layers_sel[i]      = tab_layers_sel[i + 1];
+		tab_layers_sel_time[i] = tab_layers_sel_time[i + 1];
+	}
+	tab_layers_sel_count--;
+}
+
+// Deleted layers leave the selection, so do masks and filters (they can not be grouped)
+static void tab_layers_sel_prune(void) {
+	for (i32 i = tab_layers_sel_count - 1; i >= 0; --i) {
+		slot_layer_t *l = tab_layers_sel[i];
+		if (array_index_of(g_project->_->layers, l) < 0 || slot_layer_is_mask(l) || slot_layer_is_filter(l)) {
+			tab_layers_sel_remove(l);
+		}
+	}
+}
+
+static bool tab_layers_selectable(slot_layer_t *l) {
+	return !slot_layer_is_mask(l) && !slot_layer_is_filter(l);
+}
+
+// A click on a layer row. Ctrl and Shift change the selection and keep the current layer, plain clicks clear it.
+// Returns true when the click was a selection click (no drag starts).
+static bool tab_layers_click_select(slot_layer_t *l) {
+	if (!g_ui->is_ctrl_down && !g_ui->is_shift_down) {
+		tab_layers_sel_count = 0;
+		return false;
+	}
+	if (!tab_layers_selectable(l)) {
+		return false;
+	}
+	slot_layer_t *cur = g_context->layer;
+	if (cur != NULL && tab_layers_selectable(cur)) {
+		tab_layers_sel_add(cur);
+	}
+	if (g_ui->is_shift_down && cur != NULL) {
+		// Range in the list, the rows between the current layer and this one
+		i32 a = array_index_of(g_project->_->layers, cur);
+		i32 b = array_index_of(g_project->_->layers, l);
+		i32 lo = a < b ? a : b;
+		i32 hi = a < b ? b : a;
+		for (i32 i = lo; i <= hi && lo >= 0; ++i) {
+			slot_layer_t *m = g_project->_->layers->buffer[i];
+			if (tab_layers_selectable(m) && !tab_layers_slot_hidden(m)) {
+				tab_layers_sel_add(m);
+			}
+		}
+		context_set_layer(l);
+	}
+	else if (tab_layers_sel_index(l) >= 0 && tab_layers_sel_count > 1) { // Ctrl+click on a selected layer unselects it
+		tab_layers_sel_remove(l);
+		if (l == cur) {
+			context_set_layer(tab_layers_sel[tab_layers_sel_count - 1]);
+		}
+	}
+	else {
+		tab_layers_sel_add(l);
+		context_set_layer(l);
+	}
+	ui_dock_redraw(TAB_AREA_SIDEBAR0);
+	return true;
+}
+
+bool tab_layers_is_selected(slot_layer_t *l) {
+	return l == g_context->layer || tab_layers_sel_index(l) >= 0;
+}
+
+// Puts the selected layers (or the current one) into a new folder, in their order, and opens its name for typing.
+// The folder takes the place of the topmost of them. Undo: one step per layer moved in, then the folder.
+void tab_layers_group_selection(void) {
+	slot_layer_t_array_t *layers = g_project->_->layers;
+	slot_layer_t         *cur    = g_context->layer;
+	if (cur != NULL && (slot_layer_is_mask(cur) || slot_layer_is_filter(cur))) {
+		cur = cur->parent;
+	}
+	slot_layer_t *pick[TAB_LAYERS_SEL_MAX];
+	i32           count = 0;
+	for (i32 i = layers->length - 1; i >= 0 && count < TAB_LAYERS_SEL_MAX; --i) { // Top to bottom
+		slot_layer_t *l = layers->buffer[i];
+		if ((l == cur || tab_layers_sel_index(l) >= 0) && tab_layers_selectable(l)) {
+			pick[count++] = l;
+		}
+	}
+	// A layer inside a picked folder moves with it
+	i32 n = 0;
+	for (i32 i = 0; i < count; ++i) {
+		bool inside = false;
+		for (i32 j = 0; j < count; ++j) {
+			if (i != j && slot_layer_is_descendant(pick[i], pick[j])) {
+				inside = true;
+			}
+		}
+		if (!inside) {
+			pick[n++] = pick[i];
+		}
+	}
+	if (n == 0) {
+		return;
+	}
+
+	// The folder goes above the topmost picked layer, same as New > Group did for one layer
+	slot_layer_t         *top      = pick[0];
+	slot_layer_t_array_t *pointers = tab_layers_init_layer_map();
+	slot_layer_t         *group    = layers_new_group();
+	if (group == NULL) {
+		return;
+	}
+	context_set_layer(top);
+	array_remove(layers, group);
+	array_insert(layers, array_index_of(layers, top) + 1, group);
+	group->parent = top->parent;
+	top->parent   = group;
+	tab_layers_remap_all_layer_pointers(pointers);
+	context_set_layer(group);
+	history_new_group();
+
+	// The others follow in their order, each at the bottom of the folder
+	for (i32 i = 1; i < n; ++i) {
+		slot_layer_move_to_group_bottom(pick[i], group);
+	}
+
+	tab_layers_sel_count      = 0;
+	group->show_panel         = true;
+	context_set_layer(group);
+	tab_layers_rename_pending = group->id;
+	make_material_parse_mesh_material();
+	ui_dock_redraw(TAB_AREA_SIDEBAR0);
+}
+
 void tab_layers_set_drag_layer(slot_layer_t *layer, f32 off_x, f32 off_y) {
 	base_drag_off_x      = off_x;
 	base_drag_off_y      = off_y;
@@ -61,10 +225,12 @@ void tab_layers_handle_layer_icon_state(slot_layer_t *l, i32 i, ui_state_t state
 	}
 
 	if (state == UI_STATE_STARTED) {
-		context_set_layer(l);
-		tab_layers_set_drag_layer(g_context->layer, -(mouse_x - uix - g_ui->_window_x - 3), -(mouse_y - uiy - g_ui->_window_y + 1));
+		if (!tab_layers_click_select(l)) {
+			context_set_layer(l);
+			tab_layers_set_drag_layer(g_context->layer, -(mouse_x - uix - g_ui->_window_x - 3), -(mouse_y - uiy - g_ui->_window_y + 1));
+		}
 	}
-	else if (state == UI_STATE_RELEASED && slot_layer_is_group(l)) {
+	else if (state == UI_STATE_RELEASED && slot_layer_is_group(l) && !g_ui->is_ctrl_down && !g_ui->is_shift_down) {
 		// Clicking the folder icon opens or closes the folder
 		l->show_panel = !l->show_panel;
 		ui_dock_redraw(TAB_AREA_SIDEBAR0);
@@ -538,6 +704,58 @@ static void tab_layers_draw_mask_slot(slot_layer_t *l, f32 x, f32 y, f32 size, u
 	}
 }
 
+static void tab_layers_group_selection_next_frame(void *_) {
+	tab_layers_group_selection();
+}
+
+// Brush or bucket badge in the bottom left corner of the thumbnail: paint layers and fill layers at a glance
+static void tab_layers_draw_type_badge(slot_layer_t *l, f32 x, f32 y, f32 icon_h) {
+	if (!slot_layer_is_layer(l) || slot_layer_is_filter(l)) {
+		return;
+	}
+	f32            r     = 9 * UI_SCALE();
+	f32            cx    = x + r + 1;
+	f32            cy    = y + icon_h - r - 1;
+	gpu_texture_t *icons = resource_get("icons.k");
+	rect_t        *t     = resource_tile50(icons, l->fill_material != NULL ? ICON_FILL : ICON_BRUSH);
+	draw_set_color(0xd8202020);
+	draw_filled_circle(cx, cy, r, 16);
+	draw_set_color(l->fill_material != NULL ? 0xff7fb6ee : 0xfff0d070); // The colors of the accent bar, lighter
+	f32 s = r * 1.8;
+	draw_scaled_sub_image(icons, t->x, t->y, t->w, t->h, cx - s / 2, cy - s / 2, s, s);
+	draw_set_color(0xffffffff);
+}
+
+// Arrow after the mask slot, pointing down while the mask stack is open. Turns smoothly between the two.
+static f32 tab_layers_arrow_turn[256];
+
+static void tab_layers_draw_mask_arrow(slot_layer_t *l, f32 x, f32 cy) {
+	f32 *t      = &tab_layers_arrow_turn[l->id & 255];
+	f32  target = l->show_panel ? 1.0 : 0.0;
+	*t += (target - *t) * 0.3;
+	if (fabsf(target - *t) > 0.01) {
+		ui_dock_redraw(TAB_AREA_SIDEBAR0);
+	}
+	else {
+		*t = target;
+	}
+	f32 a  = *t * 3.14159265 * 0.5; // 0 points right, 1 points down
+	f32 h  = 4 * UI_SCALE();
+	f32 cs = cosf(a);
+	f32 sn = sinf(a);
+	f32 px[3] = {h, -h * 0.7f, -h * 0.7f}; // Right pointing triangle around its center
+	f32 py[3] = {0, -h, h};
+	f32 qx[3];
+	f32 qy[3];
+	for (i32 k = 0; k < 3; ++k) {
+		qx[k] = x + h + px[k] * cs - py[k] * sn;
+		qy[k] = cy + px[k] * sn + py[k] * cs;
+	}
+	draw_set_color(g_theme->LABEL_COL);
+	draw_filled_triangle(qx[0], qy[0], qx[1], qy[1], qx[2], qy[2]);
+	draw_set_color(0xffffffff);
+}
+
 void tab_layers_draw_layer_slot_full(slot_layer_t *l, i32 i) {
 	i32 step   = g_theme->ELEMENT_H;
 	f32 center = (step / 2.0) * UI_SCALE();
@@ -559,9 +777,12 @@ void tab_layers_draw_layer_slot_full(slot_layer_t *l, i32 i) {
 	f32 indent_x = eye_x + eye_w + 4 * UI_SCALE();
 	i32 icon_h   = (UI_ELEMENT_H() - 3) * 2;
 	f32 icon_x   = indent_x + depth * 14 * UI_SCALE();
-	f32 slot_h   = icon_h;                         // Mask slot is the same size as the layer thumbnail
-	f32 slot_x   = icon_x + icon_h + 14 * UI_SCALE(); // With a clear gap after the thumbnail
-	f32 name_x   = (mask_slot ? slot_x + slot_h : icon_x + icon_h) + 12 * UI_SCALE();
+	f32  slot_h    = math_floor(icon_h * 0.7);          // Mask slot is 70% of the layer thumbnail, centered on it
+	f32  slot_x    = icon_x + icon_h + 12 * UI_SCALE(); // With a clear gap after the thumbnail
+	f32  slot_y    = uiy + 3 + (icon_h - slot_h) / 2;
+	bool has_masks = mask_slot && slot_layer_get_masks(l, false) != NULL;
+	f32  marrow_x  = slot_x + slot_h + 4 * UI_SCALE(); // Expand arrow of the mask stack
+	f32  name_x    = (mask_slot ? marrow_x + 10 * UI_SCALE() : icon_x + icon_h) + 8 * UI_SCALE();
 	f32 arrow_w  = 8 * UI_SCALE(); // Right margin, the expand arrow column is gone
 	f32 arrow_x  = uix + uiw - arrow_w;
 	f32 combo_w  = uiw * (mask_slot ? 0.24 : 0.30);
@@ -594,15 +815,26 @@ void tab_layers_draw_layer_slot_full(slot_layer_t *l, i32 i) {
 	g_ui->_w         = icon_h;
 	ui_state_t state = tab_layers_draw_layer_icon(l, i, uix, uiy, false);
 	tab_layers_handle_layer_icon_state(l, i, state, uix, uiy);
+	tab_layers_draw_type_badge(l, icon_x, uiy + 3, icon_h);
 
 	if (mask_slot) {
-		tab_layers_draw_mask_slot(l, slot_x, uiy + 3, slot_h, tab_layers_row_bg(uiy));
+		tab_layers_draw_mask_slot(l, slot_x, slot_y, slot_h, tab_layers_row_bg(uiy));
+		if (has_masks) {
+			tab_layers_draw_mask_arrow(l, marrow_x, slot_y + slot_h / 2);
+		}
 	}
 
 	// Draw layer name
 	g_ui->_x = name_x;
 	g_ui->_y = uiy + center;
 	g_ui->_w = math_max(name_end - name_x, 0);
+	if (tab_layers_rename_pending == l->id) { // A new folder: its name is ready to type
+		tab_layers_rename_pending  = -1;
+		tab_layers_layer_name_edit = l->id;
+		tab_layers_layer_name_prev = string_copy(l->name);
+		tab_layers_layer_name      = string_copy(l->name);
+		ui_start_text_edit(&tab_layers_layer_name, UI_ALIGN_LEFT);
+	}
 	if (tab_layers_layer_name_edit == l->id) {
 		tab_layers_layer_name = string_copy(l->name);
 		char *new_name        = string_copy(ui_text_input(&tab_layers_layer_name, "", UI_ALIGN_LEFT, true, false));
@@ -627,7 +859,7 @@ void tab_layers_draw_layer_slot_full(slot_layer_t *l, i32 i) {
 		if (g_ui->enabled && g_ui->input_enabled && g_ui->combo_selected_id == 0 && g_ui->input_x > g_ui->_window_x + g_ui->_x &&
 		    g_ui->input_x < g_ui->_window_x + uiw && g_ui->input_y > g_ui->_window_y + g_ui->_y - center &&
 		    g_ui->input_y < g_ui->_window_y + g_ui->_y - center + (step * UI_SCALE()) * 2) {
-			if (g_ui->input_started) {
+			if (g_ui->input_started && !tab_layers_click_select(l)) {
 				context_set_layer(l);
 				tab_layers_set_drag_layer(g_context->layer, -(mouse_x - uix - g_ui->_window_x - 3), -(mouse_y - uiy - g_ui->_window_y + 1));
 			}
@@ -653,6 +885,10 @@ void tab_layers_draw_layer_slot_full(slot_layer_t *l, i32 i) {
 		if (in_focus && !g_ui->is_typing && g_ui->is_delete_down && tab_layers_can_delete(g_context->layer)) {
 			g_ui->is_delete_down = false;
 			sys_notify_on_next_frame(&tab_layers_draw_layer_slot_full_delete_layer, NULL);
+		}
+		if (in_focus && g_ui->is_ctrl_down && g_ui->is_key_pressed && g_ui->key_code == KEY_CODE_G) {
+			g_ui->is_key_pressed = false;
+			sys_notify_on_next_frame(&tab_layers_group_selection_next_frame, NULL);
 		}
 		if (in_focus && g_ui->is_ctrl_down && g_ui->is_key_pressed && g_ui->key_code == KEY_CODE_D) {
 			g_ui->is_key_pressed = false;
@@ -687,6 +923,35 @@ void tab_layers_draw_layer_highlight(slot_layer_t *l, bool mini) {
 
 	// Separator line
 	ui_fill(0, 0, (g_ui->_w / (float)UI_SCALE() - 2), 1 * UI_SCALE(), g_theme->SEPARATOR_COL);
+
+	// Multi-selected rows: a soft fill that fades and slides in (0.18 s, ease out)
+	i32 si = tab_layers_sel_index(l);
+	if (si >= 0 && !mini) {
+		f32 t = (sys_time() - tab_layers_sel_time[si]) / 0.18;
+		t     = t < 0 ? 0 : t > 1 ? 1 : t;
+		f32 e = 1.0 - (1.0 - t) * (1.0 - t) * (1.0 - t);
+		u32 a = (u32)(0x48 * e);
+		ui_fill(2 + (1.0 - e) * 8, -step * 2, g_ui->_w / (float)UI_SCALE() - 4 - (1.0 - e) * 8, step * 2, (a << 24) | (g_theme->HIGHLIGHT_COL & 0x00ffffff));
+		if (t < 1) {
+			ui_dock_redraw(TAB_AREA_SIDEBAR0);
+		}
+	}
+
+	// The current layer's soft fill grows in when it changes
+	if (g_context->layer == l && !mini) {
+		if (tab_layers_cur_last != l) {
+			tab_layers_cur_last = l;
+			tab_layers_cur_time = sys_time();
+		}
+		f32 t = (sys_time() - tab_layers_cur_time) / 0.15;
+		t     = t < 0 ? 0 : t > 1 ? 1 : t;
+		f32 e = 1.0 - (1.0 - t) * (1.0 - t);
+		u32 a = (u32)(0x30 * e);
+		ui_fill(2, -step * 2, g_ui->_w / (float)UI_SCALE() - 4, step * 2, (a << 24) | (g_theme->HIGHLIGHT_COL & 0x00ffffff));
+		if (t < 1) {
+			ui_dock_redraw(TAB_AREA_SIDEBAR0);
+		}
+	}
 
 	// Highlight selected
 	if (g_context->layer == l) {
@@ -1163,6 +1428,7 @@ void tab_layers_draw_layer_slot(slot_layer_t *l, i32 i, bool mini) {
 
 void tab_layers_draw_slots(bool mini) {
 	tab_layers_drop_into_group = NULL; // Set again by the folder row under a dragged layer
+	tab_layers_sel_prune();
 	if (!base_is_dragging || !tab_layers_drag_fits_mask() || mini) {
 		tab_layers_drop_mask_layer = NULL;
 	}
@@ -1281,12 +1547,35 @@ void tab_layers_new_mask(i32 type) {
 }
 
 // Menu of the mask slot: what can go into the mask stack of a layer or group
+// Geometry mask: a black mask filled by clicking the model with the Fill tool. Face picks polygons,
+// Fill Mode in the header switches to UV Island or Mesh, the Eraser takes parts away again.
+static void tab_layers_geometry_mask_next_frame(void *_) {
+	context_select_tool(TOOL_TYPE_FILL);
+	g_context->fill_type   = FILL_TYPE_FACE;
+	gpu_texture_t *current = _draw_current;
+	bool           in_use  = gpu_in_use;
+	if (in_use) {
+		draw_end();
+	}
+	util_uv_cache_triangle_map(); // Face mode needs the triangle map, as when picked in the header
+	if (in_use) {
+		draw_begin(current, false, 0);
+	}
+	make_material_parse_paint_material(true);
+	make_material_parse_mesh_material();
+	console_info(tr("Geometry mask: click faces to add them, Fill Mode in the header picks UV Islands or the whole Mesh"));
+}
+
 void tab_layers_mask_slot_menu_draw(void) {
 	if (ui_menu_button(tr("Paint"), "", ICON_PAINT)) {
 		tab_layers_new_mask(5);
 	}
 	if (ui_menu_button(tr("Fill"), "", ICON_MASK_FILL)) {
 		tab_layers_new_mask(2);
+	}
+	if (ui_menu_button(tr("Geometry"), "", ICON_CUBE)) { // Polygons, UV islands or the whole mesh
+		tab_layers_new_mask(0); // Black: hidden until faces are clicked
+		sys_notify_on_next_frame(&tab_layers_geometry_mask_next_frame, NULL);
 	}
 
 	// Black and white fill driven by a texture of the project, scaled and projected like any fill
@@ -1430,21 +1719,8 @@ void tab_layers_button_new_menu() {
 		}
 		layers_create_filter();
 	}
-	if (ui_menu_button(tr("Group"), "", ICON_FOLDER)) {
-		if (slot_layer_is_mask(l) || slot_layer_is_filter(l)) {
-			l = l->parent;
-		}
-
-		slot_layer_t_array_t *pointers = tab_layers_init_layer_map();
-		slot_layer_t         *group    = layers_new_group();
-		context_set_layer(l);
-		array_remove(g_project->_->layers, group);
-		array_insert(g_project->_->layers, array_index_of(g_project->_->layers, l) + 1, group);
-		group->parent = l->parent;
-		l->parent     = group;
-		tab_layers_remap_all_layer_pointers(pointers);
-		context_set_layer(group);
-		history_new_group();
+	if (ui_menu_button(tr("Group"), "ctrl+g", ICON_FOLDER)) { // The selected layers, or the current one, go into a new folder
+		tab_layers_group_selection();
 	}
 }
 
