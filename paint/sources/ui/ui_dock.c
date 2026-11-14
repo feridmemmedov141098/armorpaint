@@ -326,16 +326,15 @@ void ui_dock_reset() {
 	dock_default_leaf(view2d, TAB_VIEW2D);
 	dock_node_t *nodes = dock_leaf_create();
 	dock_default_leaf(nodes, TAB_NODES);
-	// Bottom strip, the Assets shelf is the last tab and the active one
+	// Bottom strip: the shelf sections, Materials is the active one
 	dock_node_t *status = dock_leaf_create();
-	dock_default_leaf(status, TAB_BROWSER);
+	dock_default_leaf(status, TAB_MATERIALS);
+	dock_default_leaf(status, TAB_SMART_MASKS);
+	dock_default_leaf(status, TAB_SHELF_BRUSHES);
+	dock_default_leaf(status, TAB_ALPHAS);
+	dock_default_leaf(status, TAB_HDRI);
 	dock_default_leaf(status, TAB_TEXTURES);
-	dock_default_leaf(status, TAB_SOUNDS);
-	dock_default_leaf(status, TAB_SWATCHES);
-	dock_default_leaf(status, TAB_TIMELINE);
 	dock_default_leaf(status, TAB_CONSOLE);
-	dock_default_leaf(status, TAB_FONTS);
-	dock_default_leaf(status, TAB_MATERIALS); // Assets shelf
 	status->active = dock_leaf_open_index(status, TAB_MATERIALS);
 	if (status->active < 0) {
 		status->active = 0;
@@ -394,7 +393,7 @@ f32 ui_dock_get_size(i32 role) {
 // split {-1, vertical, fixed, size, collapsed, role, node a, node b}, leaf {tab count, active, tab ids}
 // Raise the version (more negative) when the default layout changes: layouts saved before it are replaced by the new default once.
 // Version 2: Properties first in the lower sidebar, Assets the last tab of the bottom strip, after Fonts.
-#define DOCK_LAYOUT_VERSION -102
+#define DOCK_LAYOUT_VERSION -103
 static void dock_save_node(i32_array_t *a, dock_node_t *n) {
 	if (dock_is_leaf(n)) {
 		i32_array_push(a, n->tab_count);

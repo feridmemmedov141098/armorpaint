@@ -174,9 +174,6 @@ void tab_textures_draw_context_menu() {
 	if (!_tab_textures_draw_is_packed && ui_menu_button(tr("Open Containing Directory..."), "", ICON_FOLDER_OPEN)) {
 		file_start(substring(_tab_textures_draw_asset->file, 0, string_last_index_of(_tab_textures_draw_asset->file, PATH_SEP)));
 	}
-	if (!_tab_textures_draw_is_packed && ui_menu_button(tr("Open in Browser"), "", ICON_NONE)) {
-		tab_browser_show_directory(substring(_tab_textures_draw_asset->file, 0, string_last_index_of(_tab_textures_draw_asset->file, PATH_SEP)));
-	}
 	if (g_context->view_image == _tab_textures_draw_asset) {
 		if (ui_menu_button(tr("Close in 3D View"), "", ICON_NONE)) {
 			util_stencil_view_image_close();
@@ -313,16 +310,55 @@ void tab_textures_draw_edit() {
 	}
 }
 
+// Shelf section of an image: 0 Textures, 1 Alphas, 2 HDRI
+static i32 tab_textures_kind = 0;
+
+i32 tab_textures_asset_kind(asset_t *asset) {
+	if (asset->file == NULL) {
+		return 0;
+	}
+	if (path_has_ext(asset->file, "hdr") || path_has_ext(asset->file, "exr")) {
+		return 2;
+	}
+	if (string_index_of(to_lower_case(asset->file), "alpha") >= 0) {
+		return 1;
+	}
+	for (i32 i = 0; tab_alphas_files != NULL && i < tab_alphas_files->length; ++i) {
+		if (string_equals(tab_alphas_files->buffer[i], asset->file)) {
+			return 1;
+		}
+	}
+	return 0;
+}
+
+bool tab_alphas_active() {
+	return tab_alphas_selected != NULL && array_index_of(g_project->_->assets, tab_alphas_selected) >= 0;
+}
+
+static void tab_alphas_apply(void *_) {
+	brush_output_node_parse_inputs();
+	make_material_parse_paint_material(true);
+	ui_dock_redraw(TAB_AREA_STATUS);
+}
+
+static i32 tab_textures_import_kind = 0;
+
 void tab_textures_draw_import(char *path) {
+	if (tab_textures_import_kind == 1) {
+		if (tab_alphas_files == NULL) {
+			tab_alphas_files = any_array_create(0);
+		}
+		string_array_push(tab_alphas_files, string_copy(path));
+	}
 	import_asset_run(path, -1.0, -1.0, true, false, NULL);
 	ui_dock_redraw(TAB_AREA_STATUS);
 }
 
 char *tab_textures_search = "";
 
-void tab_textures_draw(i32 *htab) {
-
-	if (ui_tab(htab, tr("Textures"), false, -1, false) && g_ui->_window_h > ui_statusbar_default_h * UI_SCALE()) {
+static void tab_textures_draw_kind(i32 *htab, i32 kind, char *title) {
+	tab_textures_kind = kind;
+	if (ui_tab(htab, title, false, -1, false) && g_ui->_window_h > ui_statusbar_default_h * UI_SCALE()) {
 
 		ui_begin_sticky();
 
@@ -346,6 +382,7 @@ void tab_textures_draw(i32 *htab) {
 		ui_row(row);
 
 		if (ui_icon_button(tr("Import"), ICON_IMPORT, UI_ALIGN_CENTER)) {
+			tab_textures_import_kind = kind;
 			ui_files_show(string_array_join(path_texture_formats(), ","), false, true, &tab_textures_draw_import);
 		}
 		if (g_ui->is_hovered) {
@@ -385,6 +422,9 @@ void tab_textures_draw(i32 *htab) {
 			// Indices of the assets passing the search filter
 			i32_array_t *filtered = i32_array_create_from_raw((i32[]){}, 0);
 			for (i32 i = 0; i < g_project->_->assets->length; ++i) {
+				if (tab_textures_asset_kind(g_project->_->assets->buffer[i]) != kind) {
+					continue;
+				}
 				if (string_equals(search, "") || string_index_of(to_lower_case(g_project->_->assets->buffer[i]->name), search) >= 0) {
 					i32_array_push(filtered, i);
 				}
@@ -453,9 +493,18 @@ void tab_textures_draw(i32 *htab) {
 						}
 						g_context->select_time  = sys_time();
 						ui_view2d_hwnd->redraws = 2;
+						if (kind == 1) { // Pick the brush alpha, picking it again clears it
+							tab_alphas_selected = tab_alphas_selected == asset ? NULL : asset;
+							sys_notify_on_next_frame(&tab_alphas_apply, NULL);
+						}
+						else if (kind == 2) {
+							_tab_textures_draw_asset = asset;
+							_tab_textures_draw_img   = img;
+							sys_notify_on_next_frame(&tab_textures_draw_set_as_envmap, NULL);
+						}
 					}
 
-					if (asset == g_context->texture) {
+					if (kind == 1 ? asset == tab_alphas_selected : asset == g_context->texture) {
 						f32 _uix = g_ui->_x;
 						f32 _uiy = g_ui->_y;
 						g_ui->_x = uix;
@@ -547,6 +596,18 @@ void tab_textures_draw(i32 *htab) {
 			}
 		}
 	}
+}
+
+void tab_textures_draw(i32 *htab) {
+	tab_textures_draw_kind(htab, 0, tr("Textures"));
+}
+
+void tab_alphas_draw(i32 *htab) {
+	tab_textures_draw_kind(htab, 1, tr("Alphas"));
+}
+
+void tab_hdri_draw(i32 *htab) {
+	tab_textures_draw_kind(htab, 2, tr("HDRI"));
 }
 
 void tab_textures_remap_node_indices(ui_node_t_array_t *nodes, i32 old_pos, i32 new_pos) {

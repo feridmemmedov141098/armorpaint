@@ -439,7 +439,7 @@ void tab_materials_button_new(char *text) {
 }
 
 void tab_materials_draw_mini(i32 *htab) {
-	ui_set_hovered_tab_name(tr("Assets"));
+	ui_set_hovered_tab_name(tr("Materials"));
 
 	ui_begin_sticky();
 	ui_separator(5, true);
@@ -458,8 +458,8 @@ void tab_materials_draw_edit() {
 	}
 }
 
-void tab_materials_draw_full(i32 *htab) {
-	if (ui_tab(htab, tr("Assets"), false, -1, false)) {
+void tab_materials_draw_full(i32 *htab, char *title) {
+	if (ui_tab(htab, title, false, -1, false)) {
 		ui_begin_sticky();
 		f32_array_t *row = f32_array_create_from_raw_tmp(
 		    (f32[]){
@@ -479,25 +479,21 @@ void tab_materials_draw_full(i32 *htab) {
 		ui_end_sticky();
 		ui_separator(3, false);
 
-		// Sections of the shelf. A smart mask is an asset for the mask slot of a layer:
+		// A smart mask is an asset for the mask slot of a layer:
 		// its opacity is driven by a pattern, or it has "mask" in its name.
-		string_array_t *sections = any_array_create_from_raw(
-		    (void *[]){
-		        tr("All"),
-		        tr("Materials"),
-		        tr("Smart Masks"),
-		    },
-		    3);
-		ui_set_next_id((ui_id_t)&tab_materials_section);
-		ui_inline_radio(&tab_materials_section, sections, UI_ALIGN_LEFT);
-
 		tab_materials_draw_slots(false); // Parameters of the picked asset are in the properties tab
 	}
 }
 
 void tab_materials_draw(i32 *htab) {
-	bool mini = g_ui->_window_w <= ui_sidebar_w_mini;
-	mini ? tab_materials_draw_mini(htab) : tab_materials_draw_full(htab);
+	tab_materials_section = 1;
+	bool mini             = g_ui->_window_w <= ui_sidebar_w_mini;
+	mini ? tab_materials_draw_mini(htab) : tab_materials_draw_full(htab, tr("Materials"));
+}
+
+void tab_smart_masks_draw(i32 *htab) {
+	tab_materials_section = 2;
+	tab_materials_draw_full(htab, tr("Smart Masks"));
 }
 
 void tab_materials_accept_material_drop(slot_material_t *material) {

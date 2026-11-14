@@ -332,7 +332,11 @@ typedef enum {
 	TAB_VIEW2D    = 15,
 	TAB_NODES     = 16,
 	TAB_PROPERTIES = 17,
-	TAB_COUNT     = 18,
+	TAB_SMART_MASKS  = 18,
+	TAB_SHELF_BRUSHES = 19,
+	TAB_ALPHAS    = 20,
+	TAB_HDRI      = 21,
+	TAB_COUNT     = 22,
 } tab_id_t;
 
 typedef enum {

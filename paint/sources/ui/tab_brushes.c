@@ -2,7 +2,8 @@
 #include "../global.h"
 
 i32 _tab_brushes_draw_i;
-i32 tab_brushes_drag_pos = -1;
+i32         tab_brushes_drag_pos = -1;
+static bool tab_brushes_in_shelf = false;
 
 void tab_brushes_draw_make_brush_preview(void *_) {
 	i32           i      = _tab_brushes_draw_i;
@@ -260,8 +261,17 @@ void tab_brushes_draw(i32 *htab) {
 			}
 		}
 
-		ui_node_params_draw(CANVAS_TYPE_BRUSH, &g_config->brush_params);
+		if (!tab_brushes_in_shelf) {
+			ui_node_params_draw(CANVAS_TYPE_BRUSH, &g_config->brush_params);
+		}
 	}
+}
+
+// Brush presets in the bottom shelf, the right panel keeps the brush options
+void tab_brushes_draw_shelf(i32 *htab) {
+	tab_brushes_in_shelf = true;
+	tab_brushes_draw(htab);
+	tab_brushes_in_shelf = false;
 }
 
 void tab_brushes_accept_brush_drop(slot_brush_t *brush) {

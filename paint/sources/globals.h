@@ -378,6 +378,8 @@ char           *tab_layers_layer_name = "";
 char           *tab_meshes_mesh_name  = "";
 slot_layer_t   *tab_layers_l;
 slot_layer_t   *tab_layers_drop_mask_layer = NULL; // Layer or group whose mask slot is under a dragged material
+asset_t        *tab_alphas_selected          = NULL;  // Alpha picked in the shelf, the brush stamps its shape
+string_array_t *tab_alphas_files             = NULL;  // Images imported from the Alphas tab
 bool            tab_layers_ignore_slot_click = false; // Set for the frame a drag ended in, the release is not a click on a mask slot
 bool            slot_layer_fill_reuse_owned = false; // Redo, keep the owned material of the layer as it is
 slot_material_t *layers_fill_source          = NULL;  // Material the next new fill layer copies, the active one when null

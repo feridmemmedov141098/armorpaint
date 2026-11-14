@@ -401,7 +401,7 @@ bool context_in_layers() {
 
 bool context_in_materials() {
 	char *tab = ui_hovered_tab_name();
-	return string_equals(tab, tr("Assets"));
+	return string_equals(tab, tr("Materials")) || string_equals(tab, tr("Smart Masks"));
 }
 
 bool context_in_meshes() {

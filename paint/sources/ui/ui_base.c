@@ -233,15 +233,15 @@ void ui_base_init_tabs() {
 	_draw_callback_create(tab_meshes_draw, TAB_MESHES, "Meshes", TAB_AREA_SIDEBAR0);
 	_draw_callback_create(tab_scripts_draw, TAB_SCRIPTS, "Scripts", TAB_AREA_SIDEBAR0);
 	_draw_callback_create(tab_properties_draw, TAB_PROPERTIES, "Properties", TAB_AREA_SIDEBAR1);
-	_draw_callback_create(tab_materials_draw, TAB_MATERIALS, "Assets", TAB_AREA_STATUS); // Shelf to drag from
 	_draw_callback_create(tab_brushes_draw, TAB_BRUSHES, "Brushes", TAB_AREA_SIDEBAR1);
 	_draw_callback_create(tab_plugins_draw, TAB_PLUGINS, "Bake", TAB_AREA_SIDEBAR1); // Bake Mesh Maps panel
-	_draw_callback_create(tab_browser_draw, TAB_BROWSER, "Browser", TAB_AREA_STATUS);
+	// Shelf in the bottom strip, like Substance Painter. Browser, Fonts, Sounds, Swatches and Timeline are not shown
+	_draw_callback_create(tab_materials_draw, TAB_MATERIALS, "Materials", TAB_AREA_STATUS);
+	_draw_callback_create(tab_smart_masks_draw, TAB_SMART_MASKS, "Smart Masks", TAB_AREA_STATUS);
+	_draw_callback_create(tab_brushes_draw_shelf, TAB_SHELF_BRUSHES, "Brushes", TAB_AREA_STATUS);
+	_draw_callback_create(tab_alphas_draw, TAB_ALPHAS, "Alphas", TAB_AREA_STATUS);
+	_draw_callback_create(tab_hdri_draw, TAB_HDRI, "HDRI", TAB_AREA_STATUS);
 	_draw_callback_create(tab_textures_draw, TAB_TEXTURES, "Textures", TAB_AREA_STATUS);
-	_draw_callback_create(tab_fonts_draw, TAB_FONTS, "Fonts", TAB_AREA_STATUS);
-	_draw_callback_create(tab_sounds_draw, TAB_SOUNDS, "Sounds", TAB_AREA_STATUS);
-	_draw_callback_create(tab_swatches_draw, TAB_SWATCHES, "Swatches", TAB_AREA_STATUS);
-	_draw_callback_create(tab_timeline_draw, TAB_TIMELINE, "Timeline", TAB_AREA_STATUS);
 	_draw_callback_create(tab_console_draw, TAB_CONSOLE, "Console", TAB_AREA_STATUS);
 #ifndef NDEBUG
 	_draw_callback_create(tab_debug_draw, TAB_DEBUG, "Debug", TAB_AREA_SIDEBAR0)->closed_default = true;
