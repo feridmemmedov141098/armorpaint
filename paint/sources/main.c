@@ -183,6 +183,7 @@
 #include "ui/tab_fonts.c"
 #include "ui/tab_layers.c"
 #include "ui/tab_materials.c"
+#include "ui/tab_smart_materials.c"
 #include "ui/tab_meshes.c"
 #include "ui/tab_plugins.c"
 #include "ui/tab_properties.c"

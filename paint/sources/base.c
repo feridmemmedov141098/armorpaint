@@ -378,7 +378,7 @@ void base_update(void *_) {
 				}
 				tab_layers_drop_mask_layer = NULL;
 			}
-			else if (!context_in_browser()) {
+			else if (!context_in_browser() && !context_in_smart_materials()) {
 				base_drop_x = mouse_x;
 				base_drop_y = mouse_y;
 
@@ -395,6 +395,9 @@ void base_update(void *_) {
 		else if (base_drag_layer != NULL) {
 			if (context_in_nodes()) {
 				ui_nodes_accept_layer_drop(array_index_of(g_project->_->layers, base_drag_layer));
+			}
+			else if (context_in_smart_materials() && base_is_dragging) {
+				smart_material_save(base_drag_layer);
 			}
 			else if (context_in_layers() && base_is_dragging) {
 				slot_layer_move(base_drag_layer, g_context->drag_dest);

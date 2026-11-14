@@ -404,6 +404,10 @@ bool context_in_materials() {
 	return string_equals(tab, tr("Materials")) || string_equals(tab, tr("Smart Masks"));
 }
 
+bool context_in_smart_materials() {
+	return string_equals(ui_hovered_tab_name(), tr("Smart Materials"));
+}
+
 bool context_in_meshes() {
 	char *tab = ui_hovered_tab_name();
 	return string_equals(tab, tr("Meshes"));

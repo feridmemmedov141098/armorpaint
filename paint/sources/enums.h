@@ -336,7 +336,8 @@ typedef enum {
 	TAB_SHELF_BRUSHES = 19,
 	TAB_ALPHAS    = 20,
 	TAB_HDRI      = 21,
-	TAB_COUNT     = 22,
+	TAB_SMART_MATERIALS = 22,
+	TAB_COUNT     = 23,
 } tab_id_t;
 
 typedef enum {

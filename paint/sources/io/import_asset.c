@@ -15,6 +15,10 @@ void import_asset_run_cache_cloud_done(char *abs) {
 }
 
 void import_asset_run(char *path, f32 drop_x, f32 drop_y, bool show_box, bool hdr_as_envmap, void (*done)(void)) {
+	if (ends_with(to_lower_case(path), ".smartmat")) {
+		smart_material_apply(path);
+		return;
+	}
 	if (starts_with(path, "cloud")) {
 #ifdef IRON_ANDROID
 		console_toast(tr("Downloading"));

@@ -237,6 +237,7 @@ void ui_base_init_tabs() {
 	_draw_callback_create(tab_plugins_draw, TAB_PLUGINS, "Bake", TAB_AREA_SIDEBAR1); // Bake Mesh Maps panel
 	// Shelf in the bottom strip, like Substance Painter. Browser, Fonts, Sounds, Swatches and Timeline are not shown
 	_draw_callback_create(tab_materials_draw, TAB_MATERIALS, "Materials", TAB_AREA_STATUS);
+	_draw_callback_create(tab_smart_materials_draw, TAB_SMART_MATERIALS, "Smart Materials", TAB_AREA_STATUS);
 	_draw_callback_create(tab_smart_masks_draw, TAB_SMART_MASKS, "Smart Masks", TAB_AREA_STATUS);
 	_draw_callback_create(tab_brushes_draw_shelf, TAB_SHELF_BRUSHES, "Brushes", TAB_AREA_STATUS);
 	_draw_callback_create(tab_alphas_draw, TAB_ALPHAS, "Alphas", TAB_AREA_STATUS);
