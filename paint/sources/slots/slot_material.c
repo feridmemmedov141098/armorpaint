@@ -222,6 +222,14 @@ slot_material_t *slot_material_brush(bool mask) {
 		slot_material_set_base_white(m);
 		slot_material_to_mask_output(m); // Paints white with a Mask Output
 	}
+	else { // Paint layers start painting red
+		ui_node_t *out = slot_material_output_node(m);
+		if (out != NULL && out->inputs->length > 0 && out->inputs->buffer[0]->default_value->length >= 3) {
+			out->inputs->buffer[0]->default_value->buffer[0] = 0.8;
+			out->inputs->buffer[0]->default_value->buffer[1] = 0.05;
+			out->inputs->buffer[0]->default_value->buffer[2] = 0.05;
+		}
+	}
 	any_array_push(g_project->_->materials, m);
 	return m;
 }
