@@ -161,11 +161,7 @@ static slot_material_t *project_make_smart_mask(char *name, bool dirt) {
 	ui_node_link_t_array_t *links = m->canvas->links;
 	ui_node_t *curv = project_smart_mask_node(m, "BAKE_CURVATURE", out->x - 700, out->y - 80);
 	curv->buttons->buffer[0]->default_value->buffer[0] = dirt ? 0.0 : 1.0; // Convex only for edges
-	curv->inputs->buffer[1]->default_value->buffer[0]  = dirt ? 1.5 : 1.69; // Radius: a soft falloff from the edges for the grunge to move
-	if (!dirt) {
-		curv->inputs->buffer[0]->default_value->buffer[0] = 1.09;  // Strength
-		curv->inputs->buffer[2]->default_value->buffer[0] = -0.83; // Offset
-	}
+	curv->inputs->buffer[1]->default_value->buffer[0]  = dirt ? 1.5 : 1.25; // Radius: a soft falloff from the edges for the grunge to move
 	ui_node_t *src = curv;
 	if (dirt) { // 1 - curvature
 		ui_node_t *inv = project_smart_mask_node(m, "MATH", out->x - 480, out->y - 200);
