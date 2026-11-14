@@ -702,3 +702,49 @@ void make_curvature_bake(ui_node_t *node, ui_node_canvas_t *group, ui_node_t_arr
 	any_map_set(g_context->node_previews, string_copy(id), image);
 	free(hb);
 }
+
+// Dirt Mask node: ambient occlusion baked on the cpu (Bake Mesh Maps' ray tracer), rebaked only when Spread, AO Samples,
+// the mesh or the texture size change. Stored at most 1024 wide: occlusion is soft, and new projects bake it at startup.
+u8 *bake_maps_ao_sync(i32 w, i32 h, i32 rays, f32 distance);
+static any_map_t *make_dirt_baked = NULL;
+
+void make_dirt_ao_bake(ui_node_t *node, ui_node_canvas_t *group, ui_node_t_array_t *parents, char *id) {
+	ui_node_canvas_t *canvas  = group != NULL ? group : g_context->material->canvas;
+	i32               res_x   = math_min(math_floor(config_get_texture_res_x()), 1024);
+	i32               res_y   = math_min(math_floor(config_get_texture_res_y()), 1024);
+	f32               spread  = make_curvature_input(node, 4, canvas, parents, parents->length);
+	f32               samples = math_floor(make_curvature_input(node, 5, canvas, parents, parents->length));
+	u64               key     = make_curvature_objects_key();
+
+	if (make_dirt_baked == NULL) {
+		make_dirt_baked = any_map_create();
+	}
+	f32_array_t   *baked = any_map_get(make_dirt_baked, id);
+	gpu_texture_t *image = any_map_get(g_context->node_previews, id);
+	any_array_push(g_context->node_previews_used, id);
+	f32 settings[4] = {spread, samples, (f32)(key & 0xffffff), (f32)(key >> 40)};
+	if (image != NULL && image->width == res_x && image->height == res_y && baked != NULL && memcmp(baked->buffer, settings, sizeof(settings)) == 0) {
+		return;
+	}
+	if (baked == NULL) {
+		baked = f32_array_create(4);
+		any_map_set(make_dirt_baked, string_copy(id), baked);
+	}
+	memcpy(baked->buffer, settings, sizeof(settings));
+
+	u8 *px    = bake_maps_ao_sync(res_x, res_y, (i32)samples, spread);
+	u8 *white = NULL;
+	if (px == NULL) { // No UV map or no mesh: nothing occluded, so the dirt falls back to the curvature cavities
+		console_error(tr("Dirt Mask: unable to bake occlusion, check that the mesh has a UV map"));
+		white = malloc(res_x * res_y * 4);
+		memset(white, 255, res_x * res_y * 4);
+		px = white;
+	}
+	buffer_t b = {.buffer = px, .length = res_x * res_y * 4};
+	if (image != NULL) {
+		gpu_delete_texture(image);
+	}
+	image = gpu_create_texture_from_bytes(&b, res_x, res_y, GPU_TEXTURE_FORMAT_RGBA32);
+	any_map_set(g_context->node_previews, string_copy(id), image);
+	free(white);
+}

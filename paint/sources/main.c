@@ -56,6 +56,7 @@
 #include "nodes_material/combine_xyz_node.c"
 #include "nodes_material/curvature_bake_node.c"
 #include "nodes_material/edge_mask_node.c"
+#include "nodes_material/dirt_mask_node.c"
 #include "nodes_material/float_curve_node.c"
 #include "nodes_material/gabor_texture_node.c"
 #include "nodes_material/gamma_node.c"

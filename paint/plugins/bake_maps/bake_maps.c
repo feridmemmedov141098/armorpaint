@@ -1784,6 +1784,35 @@ u8 *bake_maps_bevel_sync(i32 w, i32 h, f32 radius) {
 	return bake_rays_out;
 }
 
+// Dirt Mask node: ambient occlusion of the low poly on the cpu, run to the end. No raytracing gpu needed.
+// distance is the ray length relative to the model's bounding box diagonal (the dirt Spread).
+// RGBA8 w x h, owned by the baker, white = open, black = occluded.
+u8 *bake_maps_ao_sync(i32 w, i32 h, i32 rays, f32 distance) {
+	bake_rays_join();
+	bake_rays_free_images();
+	if (!bake_rays_set_low()) {
+		return NULL;
+	}
+	bake_maps_update_dist();
+	f32 diag[3];
+	bake_rays_v3_sub(diag, bake_rays_lp_max, bake_rays_lp_min);
+	f32             len   = sqrtf(bake_rays_v3_dot(diag, diag));
+	bake_rays_job_t saved = bake_rays_settings;
+	bake_rays_settings.ao_strength = 1.0;
+	bake_rays_settings.ray_min     = len * 0.0005;
+	bake_rays_settings.ray_max     = bake_rays_fmax(distance, 0.001) * len;
+	minic_val_t a[7] = {minic_val_int(BAKE_TYPE_OCCLUSION), minic_val_int(bake_rays_imax(rays, 1)), minic_val_int(0), minic_val_int(0),
+	                    minic_val_int(0),                   minic_val_int(w),                       minic_val_int(h)};
+	bake_maps_start(a, 7);
+	bake_rays_join();
+	bake_rays_settings = saved;
+	if (bake_rays_out == NULL || bake_rays_w != w || bake_rays_h != h) {
+		return NULL;
+	}
+	bake_rays_dilate(16);
+	return bake_rays_out;
+}
+
 // Raytraced maps can bake on the gpu through the core bake path (Bake Texture node), from the low poly
 // at the layer resolution. step, progress, cancel and save then work on that bake.
 static render_target_t *bake_maps_gpu_rt        = NULL;

@@ -141,9 +141,10 @@ static ui_node_t *project_smart_mask_node(slot_material_t *m, char *type, f32 x,
 	return n;
 }
 
-// Edge Mask node drives the opacity: curvature edges (dirt: inverted curvature, the cavities) whose reach is
-// moved per point by a grunge noise, so the wear spreads unevenly from the edges instead of a constant-width line.
-// The grunge is the internal noise so the masks work without the library; link any alpha image to Grunge instead.
+// Edge Wear: Edge Mask node, curvature edges whose reach is moved per point by a grunge noise, so the wear spreads
+// unevenly from the edges instead of a constant-width line.
+// Dirt: Dirt Mask node, ambient occlusion it bakes itself plus the fine cavities of the curvature, broken up by noise.
+// Both drive the opacity, and work without the library; link any alpha image to Grunge instead.
 static slot_material_t *project_make_smart_mask(char *name, bool dirt) {
 	nodes_material_init();
 	slot_material_t *m = slot_material_create(g_project->_->materials->buffer[0]->data, NULL);
@@ -159,28 +160,21 @@ static slot_material_t *project_make_smart_mask(char *name, bool dirt) {
 		return m;
 	}
 	ui_node_link_t_array_t *links = m->canvas->links;
-	ui_node_t *curv = project_smart_mask_node(m, "BAKE_CURVATURE", out->x - 700, out->y - 80);
-	curv->buttons->buffer[0]->default_value->buffer[0] = dirt ? 0.0 : 1.0; // Convex only for edges
-	curv->inputs->buffer[1]->default_value->buffer[0]  = dirt ? 1.5 : 1.25; // Radius: a soft falloff from the edges for the grunge to move
-	ui_node_t *src = curv;
-	if (dirt) { // 1 - curvature
-		ui_node_t *inv = project_smart_mask_node(m, "MATH", out->x - 480, out->y - 200);
-		inv->buttons->buffer[0]->default_value->buffer[0] = 1; // Subtract
-		inv->inputs->buffer[0]->default_value->buffer[0]  = 1.0;
-		any_array_push(links, project_create_node_link(links, curv->id, 0, inv->id, 1));
-		src = inv;
+	if (dirt) {
+		ui_node_t *curv = project_smart_mask_node(m, "BAKE_CURVATURE", out->x - 520, out->y - 80);
+		curv->buttons->buffer[0]->default_value->buffer[0] = 0.0; // Both sides: below 0.5 are the cavities
+		ui_node_t *d = project_smart_mask_node(m, "DIRT_MASK", out->x - 260, out->y);
+		any_array_push(links, project_create_node_link(links, curv->id, 0, d->id, 1));
+		any_array_push(links, project_create_node_link(links, d->id, 0, out->id, 1)); // Opacity: a smart mask
+		return m;
 	}
+	ui_node_t *curv = project_smart_mask_node(m, "BAKE_CURVATURE", out->x - 700, out->y - 80);
+	curv->buttons->buffer[0]->default_value->buffer[0] = 1.0;  // Convex only for edges
+	curv->inputs->buffer[1]->default_value->buffer[0]  = 1.25; // Radius: a soft falloff from the edges for the grunge to move
+	ui_node_t *src = curv;
 	ui_node_t *noise = project_smart_mask_node(m, "TEX_NOISE", out->x - 700, out->y + 140);
 	ui_node_t *edge = project_smart_mask_node(m, "EDGE_MASK", out->x - 260, out->y);
-	if (dirt) {
-		noise->inputs->buffer[1]->default_value->buffer[0] = 4.0;  // Scale
-		edge->inputs->buffer[2]->default_value->buffer[0]  = 0.45; // Wear Level
-		edge->inputs->buffer[3]->default_value->buffer[0]  = 0.4;  // Grunge Amount
-		edge->inputs->buffer[4]->default_value->buffer[0]  = 0.4;  // Softness
-		edge->inputs->buffer[5]->default_value->buffer[0]  = 0.0;  // Peel
-		edge->inputs->buffer[7]->default_value->buffer[0]  = 0.3;  // Breakup
-	}
-	else { // Edge Wear, tuned by hand
+	{ // Edge Wear, tuned by hand
 		noise->inputs->buffer[1]->default_value->buffer[0] = 48.0; // Scale
 		noise->inputs->buffer[2]->default_value->buffer[0] = 2.0;  // Detail
 		noise->inputs->buffer[3]->default_value->buffer[0] = 1.0;  // Roughness

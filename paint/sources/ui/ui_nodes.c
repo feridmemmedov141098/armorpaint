@@ -167,13 +167,13 @@ static i32 ui_nodes_add_menu_category(i32 list_index, ui_node_t_array_t *list, u
 	char *t                 = n->type;
 	char *input[]           = {"ATTRIBUTE", "RGB", "NEW_GEOMETRY", "OBJECT_INFO", "TEX_COORD", "UVMAP", "VALUE", "WIREFRAME"};
 	char *layer[]           = {"LAYER", "LAYER_MASK", "MATERIAL", "PICKER"};
-	char *bake[]            = {"TEX_BAKE", "BAKE_CURVATURE", "EDGE_MASK"};
+	char *bake[]            = {"TEX_BAKE", "BAKE_CURVATURE", "EDGE_MASK", "DIRT_MASK"};
 	char *color[]           = {"BLUR", "BRIGHTCONTRAST", "COLMASK", "VALTORGB", "GAMMA", "HUE_SAT", "INVERT_COLOR", "MIX_RGB", "QUANTIZE", "CURVE_RGB", "REPLACECOL", "DIRECT_WARP"};
 	char *converter[]       = {"COMBINE_COLOR", "SEPARATE_COLOR", "RGBTOBW", "COMBXYZ", "SEPXYZ", "MATH", "MAPRANGE", "CLAMP", "FLOAT_CURVE"};
 	char *vector[]          = {"BUMP", "MAPPING", "MIX_NORMAL_MAP", "NORMAL", "NORMAL_MAP", "CURVE_VEC", "VECT_MATH", "VECT_ROTATE", "VECT_TRANSFORM"};
 	if (ui_nodes_type_in(t, input, 8)) return 0;
 	if (ui_nodes_type_in(t, layer, 4)) return 1;
-	if (ui_nodes_type_in(t, bake, 3)) return 3;
+	if (ui_nodes_type_in(t, bake, 4)) return 3;
 	if (starts_with(t, "TEX_")) return 2;
 	if (ui_nodes_type_in(t, color, 12)) return 4;
 	if (ui_nodes_type_in(t, converter, 9)) return 5;

@@ -207,6 +207,9 @@ void make_material_bake_node_preview(ui_node_t *node, ui_node_canvas_t *group, u
 	else if (string_equals(node->type, "BAKE_CURVATURE")) {
 		make_curvature_bake(node, group, parents, make_material_node_preview_id(node, parents));
 	}
+	else if (string_equals(node->type, "DIRT_MASK")) {
+		make_dirt_ao_bake(node, group, parents, make_material_node_preview_id(node, parents));
+	}
 }
 
 void make_material_traverse_nodes(ui_node_t_array_t *nodes, ui_node_canvas_t *group, ui_node_t_array_t *parents) {

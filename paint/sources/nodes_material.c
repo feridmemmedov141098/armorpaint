@@ -31,6 +31,7 @@ void nodes_material_init() {
 	checker_texture_node_init();
 	curvature_bake_node_init();
 	edge_mask_node_init();
+	dirt_mask_node_init();
 	gabor_texture_node_init();
 	gradient_texture_node_init();
 	image_texture_node_init();
