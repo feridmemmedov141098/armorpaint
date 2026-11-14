@@ -12,7 +12,7 @@ bool make_material_is_default(shader_data_t *m) {
 bool make_material_get_mout() {
 	for (i32 i = 0; i < g_context->material->canvas->nodes->length; ++i) {
 		ui_node_t *n = g_context->material->canvas->nodes->buffer[i];
-		if (string_equals(n->type, "OUTPUT_MATERIAL_PBR")) {
+		if (string_equals(n->type, "OUTPUT_MATERIAL_PBR") || string_equals(n->type, "OUTPUT_MASK")) {
 			return true;
 		}
 	}

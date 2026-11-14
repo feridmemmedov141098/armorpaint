@@ -220,6 +220,8 @@ project_t *import_arm_from_map_to_arm(any_map_t *old) {
 			ld->path_curved        = armpack_map_get_i32(old, "path_curved") > 0;
 			ld->path_material      = ld->path_points != NULL ? armpack_map_get_i32(old, "path_material") : -1;
 			ld->path_text          = armpack_map_get_i32(old, "path_text") > 0;
+			ld->mask_black         = armpack_map_get_f32(old, "mask_black");
+			ld->mask_white_off     = armpack_map_get_f32(old, "mask_white_off");
 			any_array_push(project->layer_datas, ld);
 		}
 	}
@@ -320,6 +322,11 @@ project_t *import_arm_from_map_to_arm(any_map_t *old) {
 	project->mesh_groups        = import_arm_get_node_canvas_array(old, "mesh_groups");
 
 	return project;
+}
+
+project_t *import_arm_from_version_23(any_map_t *old) {
+	// layer_data_t mask_black and mask_white_off added, missing keys read as 0 (default levels)
+	return import_arm_from_map_to_arm(old);
 }
 
 project_t *import_arm_from_version_22(any_map_t *old) {
@@ -537,7 +544,7 @@ project_t *import_arm_from_old(buffer_t *b) {
 	    import_arm_from_version_5,  import_arm_from_version_6,  import_arm_from_version_7,  import_arm_from_version_8,  import_arm_from_version_9,
 	    import_arm_from_version_10, import_arm_from_version_11, import_arm_from_version_12, import_arm_from_version_13, import_arm_from_version_14,
 	    import_arm_from_version_15, import_arm_from_version_16, import_arm_from_version_17, import_arm_from_version_18, import_arm_from_version_19,
-	    import_arm_from_version_20, import_arm_from_version_21, import_arm_from_version_22,
+	    import_arm_from_version_20, import_arm_from_version_21, import_arm_from_version_22, import_arm_from_version_23,
 	};
 	for (i32 v = sizeof(fns) / sizeof(fns[0]) - 1; v >= 0; --v) {
 		if (import_arm_is_version(b, i32_to_string(v))) {

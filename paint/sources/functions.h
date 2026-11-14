@@ -63,6 +63,7 @@ void                  context_sync_layer_material();
 bool                  slot_material_is_hidden(slot_material_t *m);
 slot_material_t      *slot_material_brush(bool mask);
 void                  slot_material_set_base_white(slot_material_t *m);
+void                  slot_material_to_mask_output(slot_material_t *m);
 void                  slot_material_set_base_texture(slot_material_t *m, i32 asset_index);
 bool                  slot_material_is_smart_mask(slot_material_t *m);
 bool                  tab_layers_combo_blending(slot_layer_t *l, bool label);
@@ -681,6 +682,7 @@ void                   script_layer_set_object(slot_layer_t *l, object_t *object
 void                   script_layer_set_name(slot_layer_t *l, char *name);
 void                   script_layer_update(slot_layer_t *l);
 void                   script_layer_set_uv_type(slot_layer_t *l, i32 uv_type);
+void                   script_layer_set_mask_levels(slot_layer_t *l, f32 black, f32 white);
 slot_layer_t          *script_layer_duplicate(slot_layer_t *l);
 slot_layer_t          *script_layer_merge_down(slot_layer_t *l);
 slot_layer_t          *script_layer_merge_group(slot_layer_t *group);

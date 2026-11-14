@@ -24,11 +24,11 @@ static ui_node_canvas_t *ui_node_params_get_canvas(i32 canvas_type) {
 
 // Edited node, first match in order of priority
 static ui_node_t *ui_node_params_source(i32 canvas_type) {
-	char  *material_types[] = {"GROUP", "SHADER_GPU", "OUTPUT_MATERIAL_PBR"};
+	char  *material_types[] = {"GROUP", "SHADER_GPU", "OUTPUT_MATERIAL_PBR", "OUTPUT_MASK"};
 	char  *brush_types[]    = {"brush_output_node"};
 	char  *mesh_types[]     = {"GROUP", "MESH_SCRIPT", "MESH_OUTPUT"};
 	char **types            = canvas_type == CANVAS_TYPE_BRUSH ? brush_types : canvas_type == CANVAS_TYPE_MESH ? mesh_types : material_types;
-	i32    count            = canvas_type == CANVAS_TYPE_BRUSH ? 1 : 3;
+	i32    count            = canvas_type == CANVAS_TYPE_BRUSH ? 1 : canvas_type == CANVAS_TYPE_MESH ? 3 : 4;
 
 	ui_node_canvas_t *canvas = ui_node_params_get_canvas(canvas_type);
 	if (canvas == NULL) {

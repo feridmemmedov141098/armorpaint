@@ -414,6 +414,8 @@ static slot_layer_t *slot_layer_copy(slot_layer_t *raw) {
 
 	l->visible            = raw->visible;
 	l->mask_opacity       = raw->mask_opacity;
+	l->mask_black         = raw->mask_black;
+	l->mask_white_off     = raw->mask_white_off;
 	l->fill_material      = raw->fill_material; // Replaced by an own copy in slot_layer_duplicate
 	l->object_mask        = raw->object_mask;
 	l->blending           = raw->blending;
@@ -660,6 +662,9 @@ void slot_layer_to_fill_layer(slot_layer_t *raw) {
 	slot_material_t *own = slot_layer_find_owned_material(raw);
 	if (own == NULL || (!slot_layer_fill_reuse_owned && g_context->material != own)) {
 		own = slot_layer_make_owned_material(raw, g_context->material);
+		if (slot_layer_is_mask(raw)) {
+			slot_material_to_mask_output(own); // A new fill mask writes through a Mask Output
+		}
 	}
 	g_context->material = own;
 	raw->fill_material  = own;

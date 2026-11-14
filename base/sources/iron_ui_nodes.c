@@ -2123,12 +2123,13 @@ ui_nodes_t *ui_nodes_create() {
 	ui_nodes_exclude_remove = any_array_create_from_raw(
 	    (void *[]){
 	        "OUTPUT_MATERIAL_PBR",
+	        "OUTPUT_MASK",
 	        "GROUP_OUTPUT",
 	        "GROUP_INPUT",
 	        "brush_output_node",
 	        "MESH_OUTPUT",
 	    },
-	    5);
+	    6);
 	ui_nodes_on_custom_button = nodes_on_custom_button;
 	return raw;
 }

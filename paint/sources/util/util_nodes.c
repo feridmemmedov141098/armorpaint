@@ -78,7 +78,7 @@ gpu_texture_t *ui_nodes_get_node_preview_image(ui_node_t *n) {
 			img = g_project->_->materials->buffer[id]->image;
 		}
 	}
-	else if (string_equals(n->type, "OUTPUT_MATERIAL_PBR")) {
+	else if (string_equals(n->type, "OUTPUT_MATERIAL_PBR") || string_equals(n->type, "OUTPUT_MASK")) {
 		img = g_context->material->image;
 	}
 	else if (string_equals(n->type, "brush_output_node")) {
@@ -412,7 +412,7 @@ void ui_nodes_make_node_preview(ui_node_t *node) {
 	g_context->node_preview_name = string_copy(node->name);
 
 	if (string_equals(node->type, "LAYER") || string_equals(node->type, "LAYER_MASK") || string_equals(node->type, "MATERIAL") ||
-	    string_equals(node->type, "OUTPUT_MATERIAL_PBR")) {
+	    string_equals(node->type, "OUTPUT_MATERIAL_PBR") || string_equals(node->type, "OUTPUT_MASK")) {
 		return;
 	}
 

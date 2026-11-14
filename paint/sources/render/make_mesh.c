@@ -111,6 +111,16 @@ static char *make_mesh_mask_blend(i32 blending, char *dst, char *src, char *opac
 // The masks of the layer and the masks of each parent group are separate stacks, each blends bottom to top from white,
 // then the stacks multiply so a group mask always limits what is inside the group.
 // tex_prefix + mask id is the name of the bound mask texture, uid keeps the generated names unique per caller.
+// Mask levels: remaps the sampled mask value from black..white to 0..1, nothing written at the default levels
+static void make_mesh_write_mask_levels(node_shader_t *kong, char *sample, slot_layer_t *m) {
+	if (m->mask_black <= 0.0 && m->mask_white_off <= 0.0) {
+		return;
+	}
+	f32 black = m->mask_black;
+	f32 range = math_max((1.0 - m->mask_white_off) - black, 0.001);
+	node_shader_write_frag(kong, string_tmp("%s = clamp((%s - float(%s)) / float(%s), 0.0, 1.0);", sample, sample, f32_to_string(black), f32_to_string(range)));
+}
+
 static void make_mesh_write_mask_stacks(node_shader_t *kong, slot_layer_t_array_t *masks, char *result, char *tex_prefix, char *tex_coord, char *uid) {
 	for (i32 i = 0; i < masks->length; ++i) {
 		slot_layer_t *owner = masks->buffer[i]->parent;
@@ -140,6 +150,7 @@ static void make_mesh_write_mask_stacks(node_shader_t *kong, slot_layer_t_array_
 			char *opac   = string_tmp("float(%s)", f32_to_string(slot_layer_get_opacity(m)));
 			node_shader_write_frag(kong, string_tmp("float %s = sample_lod(%s%s, sampler_linear, %s, 0.0).r;", sample, tex_prefix, i32_to_string(m->id),
 			                                        tex_coord));
+			make_mesh_write_mask_levels(kong, sample, m);
 			node_shader_write_frag(kong, string_tmp("%s = %s;", stack, make_mesh_mask_blend(slot_layer_get_mask_blending(m), stack, sample, opac)));
 		}
 		if (written) {
@@ -697,6 +708,7 @@ node_shader_context_t *make_mesh_run(material_t *data, i32 layer_pass) {
 				i32 id = g_context->layer->id;
 				node_shader_write_frag(kong,
 				                       string_tmp("float mask_view = sample_lod(texpaint%s, sampler_linear, %s, 0.0).r;", i32_to_string(id), tex_coord_layer));
+				make_mesh_write_mask_levels(kong, "mask_view", g_context->layer);
 			}
 			else {
 				node_shader_write_frag(kong, "float mask_view = 1.0;");

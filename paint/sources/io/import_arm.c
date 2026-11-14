@@ -1071,7 +1071,9 @@ void import_arm_run_project(char *path) {
 			if (ld->decal_mat != NULL) {
 				l->decal_mat = mat4_from_f32_array(ld->decal_mat, 0);
 			}
-			l->mask_opacity = ld->opacity_mask;
+			l->mask_opacity   = ld->opacity_mask;
+			l->mask_black     = ld->mask_black;
+			l->mask_white_off = ld->mask_white_off;
 			if (i == 0 && l->mask_opacity < 1.0) {
 				g_project->_->translucency = true;
 			}

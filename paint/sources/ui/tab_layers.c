@@ -1226,6 +1226,7 @@ static void tab_layers_new_fill_mask_next_frame(slot_layer_t *m) {
 			slot_material_set_base_texture(own, asset);
 		}
 	}
+	slot_material_to_mask_output(own); // Mask Output, a smart mask copy too: what drove it now drives Mask
 	slot_layer_to_fill_layer(m);
 }
 

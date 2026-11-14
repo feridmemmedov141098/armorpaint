@@ -1153,6 +1153,68 @@ slot_layer_t *layers_merge_group(slot_layer_t *l) {
 	return children->buffer[0];
 }
 
+static any_array_t *layers_levels_garbage = NULL; // Pairs of pixel buffer and texture of masks with levels, freed on the next frame
+
+// The mask as merging and export read it: its texture at the default levels, otherwise a temporary copy with the levels
+// (Black, White in the Properties) applied, the same remap the viewport does in make_mesh_write_mask_levels.
+// The caller deletes the result when it is not m->texpaint.
+static gpu_texture_t *layers_mask_levels_texture(slot_layer_t *m) {
+	if (m->mask_black <= 0.0 && m->mask_white_off <= 0.0) {
+		return m->texpaint;
+	}
+	if (layers_levels_garbage == NULL) {
+		layers_levels_garbage = any_array_create(0);
+	}
+	i32       w     = m->texpaint->width;
+	i32       h     = m->texpaint->height;
+	buffer_t *px    = gpu_get_texture_pixels(m->texpaint);
+	f32       black = m->mask_black;
+	f32       range = math_max((1.0 - m->mask_white_off) - black, 0.001);
+#ifdef IRON_BGRA
+	i32 r = 2;
+#else
+	i32 r = 0;
+#endif
+	buffer_t *out = buffer_create(w * h * 4);
+	for (i32 i = 0; i < w * h; ++i) {
+		f32 v = (px->buffer[i * 4 + r] / 255.0 - black) / range;
+		v     = v < 0.0 ? 0.0 : v > 1.0 ? 1.0 : v;
+		u8  b = (u8)(v * 255.0 + 0.5);
+		out->buffer[i * 4 + 0] = b;
+		out->buffer[i * 4 + 1] = b;
+		out->buffer[i * 4 + 2] = b;
+		out->buffer[i * 4 + 3] = px->buffer[i * 4 + 3];
+	}
+	gpu_texture_t *t = gpu_create_texture_from_bytes(out, w, h, GPU_TEXTURE_FORMAT_RGBA32);
+	any_array_push(layers_levels_garbage, out); // Freed with the texture once the frame is done with them
+	return t;
+}
+
+static void layers_levels_free_on_next_frame(void *_) {
+	for (i32 i = 0; i < layers_levels_garbage->length; ++i) {
+		void *p = layers_levels_garbage->buffer[i];
+		if (i % 2 == 0) {
+			array_free(p);
+			free(p);
+		}
+		else {
+			gpu_delete_texture(p);
+		}
+	}
+	layers_levels_garbage->length = 0;
+}
+
+// Done with a texture from layers_mask_levels_texture
+static void layers_mask_levels_release(slot_layer_t *m, gpu_texture_t *t) {
+	if (t == m->texpaint) {
+		return;
+	}
+	if (layers_levels_garbage->length == 1) { // First pair of this frame
+		sys_notify_on_next_frame(&layers_levels_free_on_next_frame, NULL);
+	}
+	any_array_push(layers_levels_garbage, t);
+}
+
 void layers_merge_layer(slot_layer_t *l0, slot_layer_t *l1, bool use_mask) {
 	if (!l1->visible || slot_layer_is_group(l1)) {
 		return;
@@ -1175,9 +1237,10 @@ void layers_merge_layer(slot_layer_t *l0, slot_layer_t *l1, bool use_mask) {
 		// 	merge_layer(l1masks[i + 1], l1masks[i]);
 		// }
 		layers_make_temp_mask_img();
+		gpu_texture_t *m0 = layers_mask_levels_texture(l1masks->buffer[0]);
 		_gpu_begin(pipes_temp_mask_image, NULL, NULL, GPU_CLEAR_NONE, 0, 0.0);
 		gpu_set_pipeline(pipes_merge_mask);
-		gpu_set_texture(pipes_tex0_merge_mask, l1masks->buffer[0]->texpaint);
+		gpu_set_texture(pipes_tex0_merge_mask, m0);
 		gpu_set_texture(pipes_texa_merge_mask, empty);
 		gpu_set_float(pipes_opac_merge_mask, l1masks->buffer[0]->mask_opacity);
 		gpu_set_int(pipes_blending_merge_mask, BLEND_TYPE_MIX);
@@ -1185,13 +1248,15 @@ void layers_merge_layer(slot_layer_t *l0, slot_layer_t *l1, bool use_mask) {
 		gpu_set_index_buffer(const_data_screen_aligned_ib);
 		gpu_draw();
 		gpu_end();
+		layers_mask_levels_release(l1masks->buffer[0], m0);
 		mask = pipes_temp_mask_image;
 	}
 
 	if (slot_layer_is_mask(l1)) {
+		gpu_texture_t *m1 = layers_mask_levels_texture(l1);
 		_gpu_begin(l0->texpaint, NULL, NULL, GPU_CLEAR_NONE, 0, 0.0);
 		gpu_set_pipeline(pipes_merge_mask);
-		gpu_set_texture(pipes_tex0_merge_mask, l1->texpaint);
+		gpu_set_texture(pipes_tex0_merge_mask, m1);
 		gpu_set_texture(pipes_texa_merge_mask, layers_temp_image);
 		gpu_set_float(pipes_opac_merge_mask, l1->mask_opacity);
 		gpu_set_int(pipes_blending_merge_mask, slot_layer_get_mask_blending(l1));
@@ -1199,6 +1264,7 @@ void layers_merge_layer(slot_layer_t *l0, slot_layer_t *l1, bool use_mask) {
 		gpu_set_index_buffer(const_data_screen_aligned_ib);
 		gpu_draw();
 		gpu_end();
+		layers_mask_levels_release(l1, m1);
 	}
 
 	if (slot_layer_is_layer(l1)) {

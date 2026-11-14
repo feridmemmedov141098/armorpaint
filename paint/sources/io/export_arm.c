@@ -280,6 +280,8 @@ buffer_t *export_arm_encode_project(char *path) {
 		                              .path_tool          = l->path_tool,
 		                              .path_curved        = l->path_curved,
 		                              .path_text          = l->path_text,
+		                              .mask_black         = l->mask_black,
+		                              .mask_white_off     = l->mask_white_off,
 		                              .path_material      = l->path_material != NULL ? array_index_of(g_project->_->materials, l->path_material) : -1});
 		any_array_push(ld, d);
 	}

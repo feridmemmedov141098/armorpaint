@@ -210,9 +210,73 @@ slot_material_t *slot_material_brush(bool mask) {
 	m->canvas->name    = name;
 	if (mask) {
 		slot_material_set_base_white(m);
+		slot_material_to_mask_output(m); // Paints white with a Mask Output
 	}
 	any_array_push(g_project->_->materials, m);
 	return m;
+}
+
+static ui_node_socket_t *slot_material_mask_socket(i32 id, i32 node_id, char *name, f32 value) {
+	return ALLOC_INIT(ui_node_socket_t, {.id            = id,
+	                                     .node_id       = node_id,
+	                                     .name          = name,
+	                                     .type          = "VALUE",
+	                                     .color         = 0xffa1a1a1,
+	                                     .default_value = f32_array_create_x(value),
+	                                     .min           = 0.0,
+	                                     .max           = 1.0,
+	                                     .precision     = 100,
+	                                     .display       = 0});
+}
+
+// Turns the Material Output of a mask material into a Mask Output (Mask, Opacity, Invert).
+// What drove the old output keeps driving the mask: the Opacity link first (smart masks drive their pattern there),
+// else the Base Color link, else the brightness of the Base Color value. Links to the other inputs are dropped.
+void slot_material_to_mask_output(slot_material_t *m) {
+	ui_node_canvas_t *canvas = m->canvas;
+	ui_node_t        *out    = slot_material_output_node(m);
+	if (out == NULL || out->inputs->length < 2) {
+		return;
+	}
+	ui_node_link_t *drive = NULL;
+	for (i32 s = 1; s >= 0 && drive == NULL; --s) { // Opacity, then Base Color
+		for (i32 i = 0; i < canvas->links->length; ++i) {
+			ui_node_link_t *l = canvas->links->buffer[i];
+			if (l->to_id == out->id && l->to_socket == s) {
+				drive = l;
+				break;
+			}
+		}
+	}
+	f32          value = 1.0;
+	f32_array_t *base  = out->inputs->buffer[0]->default_value;
+	if (drive == NULL && base->length >= 3) {
+		value = base->buffer[0] * 0.2126 + base->buffer[1] * 0.7152 + base->buffer[2] * 0.0722;
+	}
+	for (i32 i = canvas->links->length - 1; i >= 0; --i) {
+		ui_node_link_t *l = canvas->links->buffer[i];
+		if (l->to_id == out->id && l != drive) {
+			array_splice(canvas->links, i, 1);
+		}
+	}
+	if (drive != NULL) {
+		drive->to_socket = 0;
+	}
+	i32 mask_id    = out->inputs->buffer[0]->id;
+	i32 opacity_id = out->inputs->buffer[1]->id;
+	out->type      = "OUTPUT_MASK";
+	out->name      = "Mask Output";
+	out->inputs    = any_array_create_from_raw(
+        (void *[]){
+            slot_material_mask_socket(mask_id, out->id, _tr("Mask"), value),
+            slot_material_mask_socket(opacity_id, out->id, _tr("Opacity"), 1.0),
+        },
+        2);
+	out->buttons = any_array_create_from_raw(
+	    (void *[]){
+	        ALLOC_INIT(ui_node_button_t, {.name = _tr("Invert"), .type = "BOOL", .output = -1, .default_value = f32_array_create_x(0), .min = 0.0, .max = 1.0}),
+	    },
+	    1);
 }
 
 void slot_material_unload(slot_material_t *raw) {

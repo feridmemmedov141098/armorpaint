@@ -7,7 +7,7 @@
 
 char *manifest_title           = "ArmorPaint";
 char *manifest_version         = "1.1rc2";
-char *manifest_version_project = "23";
+char *manifest_version_project = "24"; // 24: mask levels in layer_datas
 char *manifest_version_config  = "4";
 char *manifest_url             = "https://armorpaint.org";
 char *manifest_url_android     = "https://play.google.com/store/apps/details?id=org.armorpaint";

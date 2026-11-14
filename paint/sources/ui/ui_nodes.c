@@ -484,7 +484,7 @@ void ui_viewnodes_on_socket_released_group_menu(void *_) {
 void ui_viewnodes_on_canvas_context_menu() {
 	ui_node_t *selected = _ui_nodes_on_canvas_released_selected;
 	g_ui->_y += 1;
-	bool is_protected = selected == NULL || string_equals(selected->type, "OUTPUT_MATERIAL_PBR") || string_equals(selected->type, "GROUP_INPUT") ||
+	bool is_protected = selected == NULL || string_equals(selected->type, "OUTPUT_MATERIAL_PBR") || string_equals(selected->type, "OUTPUT_MASK") || string_equals(selected->type, "GROUP_INPUT") ||
 	                    string_equals(selected->type, "GROUP_OUTPUT") || string_equals(selected->type, "brush_output_node") ||
 	                    string_equals(selected->type, "MESH_OUTPUT");
 	g_ui->enabled = !is_protected;

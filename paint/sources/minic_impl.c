@@ -816,6 +816,18 @@ void script_layer_set_name(slot_layer_t *l, char *name) {
 	ui_dock_redraw(TAB_AREA_SIDEBAR0);
 }
 
+// Levels of a mask, as the Black and White sliders in the Properties
+void script_layer_set_mask_levels(slot_layer_t *l, f32 black, f32 white) {
+	if (!script_layer_valid(l) || !slot_layer_is_mask(l)) {
+		return;
+	}
+	black             = math_max(0.0, math_min(0.99, black));
+	white             = math_max(black + 0.01, math_min(1.0, white));
+	l->mask_black     = black;
+	l->mask_white_off = 1.0 - white;
+	make_material_parse_mesh_material();
+}
+
 // Projection of a fill layer: 0 UV Map, 1 Triplanar, 2 Project. Takes effect on script_layer_update.
 void script_layer_set_uv_type(slot_layer_t *l, i32 uv_type) {
 	if (!script_layer_valid(l) || uv_type < 0 || uv_type > 2) {
@@ -1596,7 +1608,7 @@ void script_material_remove_node(ui_node_t *node) {
 	if (canvas == NULL || node == NULL) {
 		return;
 	}
-	if (string_equals(node->type, "OUTPUT_MATERIAL_PBR")) {
+	if (string_equals(node->type, "OUTPUT_MATERIAL_PBR") || string_equals(node->type, "OUTPUT_MASK")) {
 		return;
 	}
 	ui_remove_node(node, canvas);

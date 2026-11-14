@@ -41,6 +41,30 @@ static void tab_properties_draw_opacity(slot_layer_t *l) {
 	}
 }
 
+// Live levels of a mask: Black and White remap the whole mask without repainting it
+static void tab_properties_draw_levels(slot_layer_t *l) {
+	f32 black = l->mask_black;
+	f32 white = 1.0 - l->mask_white_off;
+	ui_row2();
+	ui_set_next_id((ui_id_t)&l->mask_black + 2);
+	ui_slider(&black, tr("Black"), 0.0, 1.0, true, 100.0, true, UI_ALIGN_RIGHT, true);
+	bool changed = ui_item_changed();
+	ui_set_next_id((ui_id_t)&l->mask_white_off + 2);
+	ui_slider(&white, tr("White"), 0.0, 1.0, true, 100.0, true, UI_ALIGN_RIGHT, true);
+	changed |= ui_item_changed();
+	if (g_ui->is_hovered) {
+		ui_tooltip(tr("Mask levels: Black hides the faint parts, White pushes grey to full"));
+	}
+	if (changed) {
+		black             = math_max(0.0, math_min(0.99, black));
+		white             = math_max(black + 0.01, math_min(1.0, white));
+		l->mask_black     = black;
+		l->mask_white_off = 1.0 - white;
+		make_material_parse_mesh_material();
+		util_layer_mask_slot_changed(l);
+	}
+}
+
 // Projection, scale and angle of a fill
 static void tab_properties_draw_projection(slot_layer_t *l) {
 	string_array_t *uv_type_items = any_array_create_from_raw(
@@ -119,6 +143,9 @@ void tab_properties_draw(i32 *htab) {
 	tab_layers_combo_site = 0;
 
 	tab_properties_draw_opacity(l);
+	if (slot_layer_is_mask(l)) {
+		tab_properties_draw_levels(l);
+	}
 
 	if (l->fill_material == NULL) {
 		if (slot_layer_is_group(l) || slot_layer_is_filter(l)) {

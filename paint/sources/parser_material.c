@@ -107,6 +107,24 @@ shader_out_t *parser_material_parse_shader(ui_node_t *node, ui_node_socket_t *so
 			sout->out_height = parser_material_parse_value_input(node->inputs->buffer[7], false);
 		}
 	}
+	else if (string_equals(node->type, "OUTPUT_MASK")) {
+		// Mask Output: one grey value written as base color, a color plugged in counts by its luminance
+		char *v;
+		if (parser_material_get_input_link(node->inputs->buffer[0]) != NULL) {
+			char *c = parser_material_parse_vector_input(node->inputs->buffer[0]);
+			v       = string_tmp("dot(%s, float3(0.2126, 0.7152, 0.0722))", c);
+		}
+		else {
+			v = parser_material_parse_value_input(node->inputs->buffer[0], false);
+		}
+		if (node->buttons->length > 0 && node->buttons->buffer[0]->default_value->buffer[0] > 0.0) { // Invert
+			v = string_tmp("(1.0 - %s)", v);
+		}
+		char *store = parser_material_store_var_name(node);
+		parser_material_write(parser_material_kong, string_tmp("float %s_mask = clamp(%s, 0.0, 1.0);", store, v));
+		sout->out_basecol = string_tmp("float3(%s_mask, %s_mask, %s_mask)", store, store, store);
+		sout->out_opacity = parser_material_parse_value_input(node->inputs->buffer[1], false);
+	}
 	return sout;
 }
 
@@ -170,6 +188,10 @@ shader_out_t *parser_material_parse(ui_node_canvas_t *canvas, node_shader_contex
 	ui_node_t *output_node = parser_material_node_by_type(parser_material_nodes, "OUTPUT_MATERIAL_PBR");
 	if (output_node != NULL) {
 		return parser_material_parse_output_pbr(output_node);
+	}
+	output_node = parser_material_node_by_type(parser_material_nodes, "OUTPUT_MASK");
+	if (output_node != NULL) {
+		return parser_material_parse_shader(output_node, NULL);
 	}
 	return NULL;
 }

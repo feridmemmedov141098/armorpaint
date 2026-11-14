@@ -89,6 +89,8 @@ typedef struct slot_layer {
 	bool                  path_text;
 	struct slot_material *path_material;
 	struct gpu_texture   *mask_slot_preview; // Combined mask stack of a layer or group, null without masks
+	f32                   mask_black;        // Mask levels: values at or below black become 0
+	f32                   mask_white_off;    // Mask levels: values at or above (1 - white_off) become 1, 0 is the default
 } slot_layer_t;
 
 typedef struct slot_font {
@@ -767,6 +769,8 @@ typedef struct layer_data {
 	bool              path_curved;
 	i32               path_material;
 	bool              path_text;
+	f32               mask_black;     // Project version 24
+	f32               mask_white_off; // Project version 24
 } layer_data_t;
 
 typedef struct timeline_layer_keyframe_data {
