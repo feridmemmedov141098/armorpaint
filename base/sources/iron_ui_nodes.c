@@ -334,9 +334,41 @@ void ui_remove_node(ui_node_t *n, ui_node_canvas_t *canvas) {
 	}
 }
 
-// Auto-connect, like Blender: sockets connect when their types match exactly (RGBA, VALUE, VECTOR, SHADER)
-static bool ui_sockets_match(ui_node_socket_t *a, ui_node_socket_t *b) {
-	return a != NULL && b != NULL && a->type != NULL && b->type != NULL && strcmp(a->type, b->type) == 0;
+// Auto-connect, like Blender: how well two sockets fit, 0 when they can not connect.
+// Same type is best. Color and vector convert well (color image into a normal map).
+// Value converts with both. Other types (shader) only connect to their own type.
+static bool ui_socket_is_data(char *t) {
+	return strcmp(t, "RGBA") == 0 || strcmp(t, "VECTOR") == 0 || strcmp(t, "VALUE") == 0;
+}
+
+static int ui_sockets_score(ui_node_socket_t *a, ui_node_socket_t *b) {
+	if (a == NULL || b == NULL || a->type == NULL || b->type == NULL) {
+		return 0;
+	}
+	if (strcmp(a->type, b->type) == 0) {
+		return 4;
+	}
+	if (!ui_socket_is_data(a->type) || !ui_socket_is_data(b->type)) {
+		return 0;
+	}
+	return strcmp(a->type, "VALUE") == 0 || strcmp(b->type, "VALUE") == 0 ? 1 : 2;
+}
+
+// Best fitting socket in list for other, with a bonus for the same name as hint, -1 when none fits
+static int ui_best_socket(ui_node_socket_array_t *list, ui_node_socket_t *other, ui_node_socket_t *hint) {
+	int best   = -1;
+	int best_s = 0;
+	for (int k = 0; k < list->length; ++k) {
+		int s = ui_sockets_score(list->buffer[k], other) * 2;
+		if (s > 0 && hint != NULL && list->buffer[k]->name != NULL && hint->name != NULL && strcmp(list->buffer[k]->name, hint->name) == 0) {
+			s++;
+		}
+		if (s > best_s) {
+			best_s = s;
+			best   = k;
+		}
+	}
+	return best;
 }
 
 static ui_node_socket_t *ui_link_from_socket(ui_node_canvas_t *canvas, ui_node_link_t *l) {
@@ -367,16 +399,22 @@ static void ui_reconnect_around(ui_node_canvas_t *canvas, ui_node_t *n) {
 		if (out->from_id != n->id || out->to_id == n->id || out->to_id == -1) {
 			continue;
 		}
-		ui_node_socket_t *ts = ui_link_to_socket(canvas, out);
+		ui_node_socket_t *ts     = ui_link_to_socket(canvas, out);
+		ui_node_link_t   *best   = NULL;
+		int               best_s = 0;
 		for (int j = 0; j < count; ++j) {
 			ui_node_link_t *in = canvas->links->buffer[j];
 			if (in->to_id != n->id || in->from_id == n->id || in->from_id == -1) {
 				continue;
 			}
-			if (ui_sockets_match(ui_link_from_socket(canvas, in), ts)) {
-				ui_add_link(canvas, in->from_id, in->from_socket, out->to_id, out->to_socket);
-				break;
+			int s = ui_sockets_score(ui_link_from_socket(canvas, in), ts);
+			if (s > best_s) {
+				best_s = s;
+				best   = in;
 			}
+		}
+		if (best != NULL) {
+			ui_add_link(canvas, best->from_id, best->from_socket, out->to_id, out->to_socket);
 		}
 	}
 }
@@ -1021,18 +1059,9 @@ void ui_node_canvas(ui_nodes_t *nodes, ui_node_canvas_t *canvas) {
 				}
 				ui_node_socket_t *fs  = ui_link_from_socket(canvas, l);
 				ui_node_socket_t *ts  = ui_link_to_socket(canvas, l);
-				int               in  = -1;
-				int               out = -1;
-				for (int k = 0; k < dn->inputs->length && in == -1; ++k) {
-					if (ui_sockets_match(fs, dn->inputs->buffer[k])) {
-						in = k;
-					}
-				}
-				for (int k = 0; k < dn->outputs->length && out == -1; ++k) {
-					if (ui_sockets_match(dn->outputs->buffer[k], ts)) {
-						out = k;
-					}
-				}
+				// Input that fits what flows in, output that fits where it goes; names break ties (Normal Map -> Normal Map)
+				int in  = ui_best_socket(dn->inputs, fs, ts);
+				int out = ui_best_socket(dn->outputs, ts, fs);
 				if (in != -1 && out != -1) {
 					ui_insert_link_id = l->id;
 					ui_insert_node_id = dn->id;
