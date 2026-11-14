@@ -126,7 +126,7 @@ void project_new_on_next_frame(void *_) {
 }
 
 void project_new_reset_layers(void *_) {
-	layers_init();
+	layers_init_default_stack(NULL);
 }
 
 void project_new_resize_layers(void *_) {

@@ -2,7 +2,7 @@
 #include "../global.h"
 
 void ui_base_init_on_next_frame(void *_) {
-	layers_init();
+	layers_init_default_stack(NULL);
 }
 
 static tab_draw_t *ui_base_all_tabs[TAB_COUNT];

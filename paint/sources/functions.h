@@ -86,6 +86,7 @@ bool                  slot_layer_can_move(slot_layer_t *raw, i32 to);
 void                  slot_layer_relocate(slot_layer_t *raw, i32 to);
 void                  slot_layer_move(slot_layer_t *raw, i32 to);
 void                  layers_init();
+void                  layers_init_default_stack(void *_);
 void                  layers_resize();
 void                  layers_resize_targets();
 void                  layers_set_bits();

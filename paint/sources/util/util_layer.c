@@ -134,6 +134,25 @@ void layers_init() {
 	                 layers_default_rough, 0.0);
 }
 
+// A new project starts with a fill layer (default material) and an empty paint layer on top of it, selected
+void layers_init_default_stack(void *_) {
+	layers_init();
+	if (g_project->_->layers->length != 1) {
+		return;
+	}
+	slot_layer_t *base = g_project->_->layers->buffer[0];
+	if (!slot_layer_is_layer(base) || base->fill_material != NULL) {
+		return;
+	}
+	slot_layer_make_owned_material(base, NULL);
+	slot_layer_to_fill_layer(base);
+	util_render_make_material_preview(); // Icon of the fill layer
+	layers_new_layer(true, -1, NULL);    // Above the fill layer, cleared on the next frame
+	make_material_parse_mesh_material();
+	g_context->layers_preview_dirty = true; // Icons of both layers
+	ui_dock_redraw(TAB_AREA_SIDEBAR0);
+}
+
 void layers_resize() {
 	if (config_get_texture_res_x() >= 8192 || config_get_texture_res_y() >= 8192) { // Save memory for >=8k
 		g_config->undo_steps = config_get_texture_res_x() == 8192 ? 4 : 1;
