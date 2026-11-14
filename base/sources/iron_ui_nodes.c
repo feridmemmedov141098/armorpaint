@@ -1125,10 +1125,22 @@ void ui_node_canvas(ui_nodes_t *nodes, ui_node_canvas_t *canvas) {
 				}
 			}
 		}
-		if (bx0 < left) ex = fmin((left - bx0) / margin, 1.0) * speed;
-		else if (bx1 > right) ex = -fmin((bx1 - right) / margin, 1.0) * speed;
-		if (by0 < top) ey = fmin((top - by0) / margin, 1.0) * speed;
-		else if (by1 > bottom) ey = -fmin((by1 - bottom) / margin, 1.0) * speed;
+		// How deep the nodes are in the border, 0..1
+		float depth = 0.0;
+		if (bx0 < left) depth = fmax(depth, fmin((left - bx0) / margin, 1.0));
+		if (bx1 > right) depth = fmax(depth, fmin((bx1 - right) / margin, 1.0));
+		if (by0 < top) depth = fmax(depth, fmin((top - by0) / margin, 1.0));
+		if (by1 > bottom) depth = fmax(depth, fmin((by1 - bottom) / margin, 1.0));
+		if (depth > 0.0) {
+			// Pan toward where the nodes are, seen from the view center: straight at an edge, diagonal in a corner
+			float dx  = (bx0 + bx1) / 2.0 - (current->_window_x + current->_window_w / 2.0);
+			float dy  = (by0 + by1) / 2.0 - (current->_window_y + current->_window_h / 2.0);
+			float len = sqrtf(dx * dx + dy * dy);
+			if (len > 0.0) {
+				ex = -dx / len * depth * speed;
+				ey = -dy / len * depth * speed;
+			}
+		}
 		if (ex != 0.0 || ey != 0.0) {
 			float sc = UI_SCALE() * current_nodes->zoom;
 			current_nodes->pan_x += ex / sc;
