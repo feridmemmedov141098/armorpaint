@@ -78,7 +78,7 @@ void edge_mask_node_init() {
                                                                   edge_mask_socket(_tr("Breakup"), 0.0, 0.0, 1.0),
                                                                   edge_mask_socket(_tr("Breakup Scale"), 2.0, 0.0, 20.0),
                                                                   edge_mask_socket(_tr("Breakup Contrast"), 0.5, 0.0, 1.0),
-                                                                  edge_mask_socket(_tr("Seed"), 0.0, 0.0, 100.0),
+                                                                  edge_mask_socket(_tr("Seed"), 0.0, 0.0, 1000.0),
                                                               },
                                                               11),
 	                                                       .outputs = any_array_create_from_raw(

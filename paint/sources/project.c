@@ -161,7 +161,11 @@ static slot_material_t *project_make_smart_mask(char *name, bool dirt) {
 	ui_node_link_t_array_t *links = m->canvas->links;
 	ui_node_t *curv = project_smart_mask_node(m, "BAKE_CURVATURE", out->x - 700, out->y - 80);
 	curv->buttons->buffer[0]->default_value->buffer[0] = dirt ? 0.0 : 1.0; // Convex only for edges
-	curv->inputs->buffer[1]->default_value->buffer[0]  = 1.5;               // Radius: a soft falloff from the edges for the grunge to move
+	curv->inputs->buffer[1]->default_value->buffer[0]  = dirt ? 1.5 : 1.69; // Radius: a soft falloff from the edges for the grunge to move
+	if (!dirt) {
+		curv->inputs->buffer[0]->default_value->buffer[0] = 1.09;  // Strength
+		curv->inputs->buffer[2]->default_value->buffer[0] = -0.83; // Offset
+	}
 	ui_node_t *src = curv;
 	if (dirt) { // 1 - curvature
 		ui_node_t *inv = project_smart_mask_node(m, "MATH", out->x - 480, out->y - 200);
@@ -171,13 +175,32 @@ static slot_material_t *project_make_smart_mask(char *name, bool dirt) {
 		src = inv;
 	}
 	ui_node_t *noise = project_smart_mask_node(m, "TEX_NOISE", out->x - 700, out->y + 140);
-	noise->inputs->buffer[1]->default_value->buffer[0] = dirt ? 4.0 : 8.0; // Scale
 	ui_node_t *edge = project_smart_mask_node(m, "EDGE_MASK", out->x - 260, out->y);
-	edge->inputs->buffer[2]->default_value->buffer[0] = dirt ? 0.45 : 0.5;  // Wear Level
-	edge->inputs->buffer[3]->default_value->buffer[0] = dirt ? 0.4 : 0.6;   // Grunge Amount
-	edge->inputs->buffer[4]->default_value->buffer[0] = dirt ? 0.4 : 0.15;  // Softness
-	edge->inputs->buffer[5]->default_value->buffer[0] = dirt ? 0.0 : 0.2;   // Peel
-	edge->inputs->buffer[7]->default_value->buffer[0] = dirt ? 0.3 : 0.0;   // Breakup
+	if (dirt) {
+		noise->inputs->buffer[1]->default_value->buffer[0] = 4.0;  // Scale
+		edge->inputs->buffer[2]->default_value->buffer[0]  = 0.45; // Wear Level
+		edge->inputs->buffer[3]->default_value->buffer[0]  = 0.4;  // Grunge Amount
+		edge->inputs->buffer[4]->default_value->buffer[0]  = 0.4;  // Softness
+		edge->inputs->buffer[5]->default_value->buffer[0]  = 0.0;  // Peel
+		edge->inputs->buffer[7]->default_value->buffer[0]  = 0.3;  // Breakup
+	}
+	else { // Edge Wear, tuned by hand
+		noise->inputs->buffer[1]->default_value->buffer[0] = 48.0; // Scale
+		noise->inputs->buffer[2]->default_value->buffer[0] = 2.0;  // Detail
+		noise->inputs->buffer[3]->default_value->buffer[0] = 1.0;  // Roughness
+		noise->inputs->buffer[4]->default_value->buffer[0] = 2.0;  // Lacunarity
+		noise->inputs->buffer[5]->default_value->buffer[0] = 0.0;  // Distortion
+		noise->buttons->buffer[2]->default_value->buffer[0] = 0;   // Normalize off
+		edge->inputs->buffer[2]->default_value->buffer[0]  = 0.3;  // Wear Level
+		edge->inputs->buffer[3]->default_value->buffer[0]  = 0.85; // Grunge Amount
+		edge->inputs->buffer[4]->default_value->buffer[0]  = 0.1;  // Softness
+		edge->inputs->buffer[5]->default_value->buffer[0]  = 0.1;  // Peel
+		edge->inputs->buffer[6]->default_value->buffer[0]  = 72.0; // Peel Scale
+		edge->inputs->buffer[7]->default_value->buffer[0]  = 0.5;  // Breakup
+		edge->inputs->buffer[8]->default_value->buffer[0]  = 20.0; // Breakup Scale
+		edge->inputs->buffer[9]->default_value->buffer[0]  = 0.64; // Breakup Contrast
+		edge->inputs->buffer[10]->default_value->buffer[0] = 123.0; // Seed
+	}
 	any_array_push(links, project_create_node_link(links, src->id, 0, edge->id, 0));
 	any_array_push(links, project_create_node_link(links, noise->id, 0, edge->id, 1));
 	any_array_push(links, project_create_node_link(links, edge->id, 0, out->id, 1)); // Opacity: a smart mask
