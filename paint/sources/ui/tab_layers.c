@@ -1,7 +1,8 @@
 
 #include "../global.h"
 
-i32   tab_layers_layer_name_edit   = -1;
+i32           tab_layers_layer_name_edit = -1;
+slot_layer_t *tab_layers_backup          = NULL; // Hidden empty layer while the stack is empty
 char *tab_layers_layer_name_prev   = NULL;
 bool  tab_layers_show_context_menu = false;
 bool  tab_layers_mini;
@@ -417,8 +418,8 @@ void tab_layers_delete_layer(slot_layer_t *l) {
 			break;
 		}
 	}
-	if (!any) { // Nothing left: an empty paint layer to keep painting on
-		layers_new_layer(true, 0, NULL);
+	if (!any) { // Nothing left: a hidden empty layer in the background, the renderer needs one
+		tab_layers_backup = layers_new_layer(true, 0, NULL);
 		make_material_parse_mesh_material();
 	}
 
@@ -1335,6 +1336,9 @@ void tab_layers_draw_layer_context_menu(slot_layer_t *l, bool mini) {
 }
 
 static bool tab_layers_slot_hidden(slot_layer_t *l) {
+	if (l == tab_layers_backup) { // The background layer that keeps the renderer going while the stack is empty
+		return true;
+	}
 	stage_t *stage = tab_stages_get_stage();
 	if (stage != NULL && string_array_index_of(stage->layers, l->name) < 0) {
 		return true;
@@ -1423,7 +1427,37 @@ void tab_layers_draw_layer_slot(slot_layer_t *l, i32 i, bool mini) {
 	}
 }
 
+// Once a real layer exists again, the hidden background layer goes. An undoable delete, so the layer
+// indices the history recorded meanwhile stay right.
+static void tab_layers_backup_check(void) {
+	slot_layer_t *b = tab_layers_backup;
+	if (b == NULL) {
+		return;
+	}
+	if (array_index_of(g_project->_->layers, b) < 0) {
+		tab_layers_backup = NULL;
+		return;
+	}
+	for (i32 i = 0; i < g_project->_->layers->length; ++i) {
+		slot_layer_t *l = g_project->_->layers->buffer[i];
+		if (l != b && slot_layer_is_layer(l) && !slot_layer_is_filter(l)) {
+			slot_layer_t_array_t *pointers = tab_layers_init_layer_map();
+			slot_layer_t         *cur      = g_context->layer;
+			tab_layers_backup              = NULL;
+			history_delete_layer(b);
+			tab_layers_remap_all_layer_pointers(pointers);
+			if (cur != b && array_index_of(g_project->_->layers, cur) >= 0) {
+				context_set_layer(cur);
+			}
+			make_material_parse_mesh_material();
+			g_context->ddirty = 2;
+			return;
+		}
+	}
+}
+
 void tab_layers_draw_slots(bool mini) {
+	tab_layers_backup_check();
 	tab_layers_drop_into_group = NULL; // Set again by the folder row under a dragged layer
 	tab_layers_sel_prune();
 	if (!base_is_dragging || !tab_layers_drag_fits_mask() || mini) {
