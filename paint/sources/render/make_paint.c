@@ -422,9 +422,11 @@ node_shader_context_t *make_paint_run_context(material_t *data, char *context_id
 		parser_material_parse_height       = g_context->material->paint_height;
 		uv_type_t uv_type                  = g_context->layer->fill_material != NULL ? g_context->layer->uv_type : g_context->brush_paint;
 		parser_material_triplanar          = uv_type == UV_TYPE_TRIPLANAR && !decal;
+		parser_material_uv_coord           = !parser_material_triplanar; // Triplanar already blends bposition from its projections
 		parser_material_sample_keep_aspect = decal;
 		parser_material_sample_uv_scale    = is_atlas ? "1.0" : "constants.brush_scale";
 		shader_out_t *sout                 = parser_material_parse(g_context->material->canvas, con_paint, kong);
+		parser_material_uv_coord           = false;
 		parser_material_parse_emission     = false;
 		parser_material_parse_subsurface   = false;
 		parser_material_parse_height       = false;

@@ -244,6 +244,7 @@ bool                      parser_material_parse_emission     = false;
 bool                      parser_material_parse_subsurface   = false;
 bool                      parser_material_parsing_basecolor  = false;
 bool                      parser_material_triplanar          = false; // Sample using tex_coord/1/2 & tex_coord_blend
+bool                      parser_material_uv_coord           = false; // Texture nodes with no Vector input use tex_coord (the layer's UV Map or Project)
 bool                      parser_material_sample_keep_aspect = false; // Adjust uvs to preserve texture aspect ratio
 #ifdef WITH_MIPMAPS
 bool parser_material_straight_cutouts = false;
