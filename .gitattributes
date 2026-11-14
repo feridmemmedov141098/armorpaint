@@ -1,3 +1,4 @@
 *.hdr binary
 *.bin binary
 *.h linguist-language=c
+*.bat text eol=crlf
