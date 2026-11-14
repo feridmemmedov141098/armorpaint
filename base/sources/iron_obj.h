@@ -24,7 +24,8 @@ typedef struct raw_mesh {
 	int               udims_v;
 	void             *vertex_arrays; // vertex_array_t[]
 	struct u32_array *index_array;
-	struct u8_array  *blob; // Source file bytes
+	struct u8_array  *blob;  // Source file bytes
+	struct u32_array *polya; // Source polygon of each triangle (triangle, quad or n-gon), NULL when unknown
 } raw_mesh_t;
 
 extern bool obj_parse_y_to_z_up;

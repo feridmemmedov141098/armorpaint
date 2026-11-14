@@ -320,6 +320,8 @@ raw_mesh_t *obj_parse(buffer_t *file_bytes, char split_code, uint64_t start_pos,
 	part->name      = string_copy(str);
 
 	i32_array_t pos_indices = {0};
+	i32_array_t poly_ids    = {0}; // Face of each triangle
+	int         poly_count  = 0;
 	i32_array_t uv_indices  = {0};
 	i32_array_t nor_indices = {0};
 
@@ -379,6 +381,7 @@ raw_mesh_t *obj_parse(buffer_t *file_bytes, char split_code, uint64_t start_pos,
 			reading_faces = true;
 			vi = ui = ni = 0;
 			full_attrib ? read_face_fast() : read_face();
+			int face_start = pos_indices.length;
 
 			if (vi == 4 && !quad_diagonal_valid(va[0], va[1], va[2], va[3])) { // Concave quad, split along the other diagonal
 				uint32_t v0 = va[0], u0 = ua[0], n0 = na[0];
@@ -527,6 +530,10 @@ raw_mesh_t *obj_parse(buffer_t *file_bytes, char split_code, uint64_t start_pos,
 					i32_array_push(&nor_indices, na[2]);
 				}
 			}
+			for (int t = face_start; t < pos_indices.length; t += 3) {
+				i32_array_push(&poly_ids, poly_count);
+			}
+			poly_count++;
 		}
 		else if (c0 == split_code) {
 			if (split_code == 'u') {
@@ -707,6 +714,15 @@ raw_mesh_t *obj_parse(buffer_t *file_bytes, char split_code, uint64_t start_pos,
 	}
 
 	obj_weld(part);
+
+	// Polygon ids follow the triangles, udim tiles reorder them
+	if (part->udims == NULL && poly_ids.length * 3 == part->inda->length) {
+		part->polya = u32_array_create(poly_ids.length);
+		for (int i = 0; i < poly_ids.length; ++i) {
+			part->polya->buffer[i] = poly_ids.buffer[i];
+		}
+	}
+	array_free(&poly_ids);
 
 	bytes = NULL;
 	if (!part->has_next) {

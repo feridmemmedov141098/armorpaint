@@ -91,6 +91,7 @@ typedef struct mesh_data_runtime {
 	i32                    skin_pending_frame; // Frame to pose at once back in view
 	bool                   skin_pending;
 	bool                   owns_arrays;
+	u32_array_t           *polygon_ids; // Source polygon of each triangle from the importer, NULL when unknown (not saved)
 } mesh_data_runtime_t;
 
 typedef struct mesh_data {

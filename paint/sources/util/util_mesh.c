@@ -462,6 +462,35 @@ static void util_mesh_merged_toggled() {
 	render_path_raytrace_ready = false;
 }
 
+// Polygon ids of the merged mesh: each object's ids after the previous object's, NULL unless every object has them
+static u32_array_t *util_mesh_merge_polygon_ids(mesh_object_t_array_t *objects, mesh_data_t *merged) {
+	i32 total = merged->index_array->length / 3;
+	i32 count = 0;
+	for (i32 i = 0; i < objects->length; ++i) {
+		mesh_data_t *d = objects->buffer[i]->data;
+		if (d->_->polygon_ids == NULL || d->_->polygon_ids->length * 3 != d->index_array->length) {
+			return NULL;
+		}
+		count += d->_->polygon_ids->length;
+	}
+	if (count != total) {
+		return NULL;
+	}
+	u32_array_t *ids    = u32_array_create(total);
+	i32          k      = 0;
+	u32          offset = 0;
+	for (i32 i = 0; i < objects->length; ++i) {
+		u32_array_t *src = objects->buffer[i]->data->_->polygon_ids;
+		u32          max = 0;
+		for (i32 j = 0; j < src->length; ++j) {
+			ids->buffer[k++] = src->buffer[j] + offset;
+			max              = src->buffer[j] > max ? src->buffer[j] : max;
+		}
+		offset += max + 1;
+	}
+	return ids;
+}
+
 static void _util_mesh_merge(mesh_object_t_array_t *paint_objects, bool paintable_only) {
 	if (paint_objects == NULL) {
 		paint_objects = g_project->_->paint_objects;
@@ -502,6 +531,7 @@ static void _util_mesh_merge(mesh_object_t_array_t *paint_objects, bool paintabl
 
 	mesh_data_t *md                         = mesh_data_create(raw);
 	md->_->owns_arrays                      = true;
+	md->_->polygon_ids                      = util_mesh_merge_polygon_ids(paint_objects, md);
 	shader_data_t *paint_material           = g_project->_->materials->buffer[0]->data;
 	g_context->merged_object                = mesh_object_create(md, paint_material);
 	g_context->merged_object->base->name    = string("%s_merged", g_context->paint_object->base->name);

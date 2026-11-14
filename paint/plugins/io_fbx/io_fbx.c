@@ -332,9 +332,15 @@ void io_fbx_parse_mesh(raw_mesh_t *raw, ufbx_mesh *mesh, ufbx_matrix *to_world, 
 	int    ti1     = 0;
 	int    ci      = 0;
 
+	u32_array_t *polya = u32_array_create(numtri); // Face of each triangle
+	int          tri   = 0;
+
 	for (int j = 0; j < (int)mesh->faces.count; ++j) {
 		ufbx_face face          = mesh->faces.data[j];
 		uint32_t  num_triangles = ufbx_triangulate_face(indices, indices_size, mesh, face);
+		for (uint32_t t = 0; t < num_triangles && tri < numtri; ++t) {
+			polya->buffer[tri++] = j;
+		}
 		for (uint32_t v_ix = 0; v_ix < num_triangles * 3; v_ix++) {
 			uint32_t a = indices[v_ix];
 
@@ -494,6 +500,7 @@ void io_fbx_parse_mesh(raw_mesh_t *raw, ufbx_mesh *mesh, ufbx_matrix *to_world, 
 	raw->inda         = (u32_array_t *)malloc(sizeof(u32_array_t));
 	raw->inda->buffer = inda;
 	raw->inda->length = raw->inda->capacity = index_count;
+	raw->polya        = tri * 3 == index_count ? polya : NULL;
 
 	raw->scale_pos = scale_pos;
 	raw->scale_tex = 1.0;

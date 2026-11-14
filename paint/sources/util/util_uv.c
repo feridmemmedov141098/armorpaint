@@ -122,16 +122,23 @@ void util_uv_cache_triangle_map() {
 	draw_begin(util_uv_trianglemap, true, 0xff000000);
 	f32  f      = (1 / 32767.0) * util_uv_trianglemap->width;
 	i32  color  = 0xff000001;
-	bool joined = false; // Triangle i is the second half of a quad, it keeps the color of i - 1
-	i32  count  = math_floor(inda->length / 3.0);
+	bool         joined = false; // Triangle i is the second half of a quad, it keeps the color of i - 1
+	i32          count  = math_floor(inda->length / 3.0);
+	u32_array_t *ids    = mesh->_->polygon_ids; // Triangles, quads and n-gons as modeled, from the importer
+	bool         exact  = polygon && ids != NULL && ids->length == count;
 	for (i32 i = 0; i < count; ++i) {
-		if (!joined) {
-			if (color == 0xffffffff)
-				color = 0xff000001;
-			color++;
+		if (exact) {
+			color = 0xff000002 + (i32)(ids->buffer[i] % 0x00fffffd); // One color per source polygon
 		}
-		bool next = polygon && !joined && i + 1 < count && util_uv_tris_quad(posa, inda, i, i + 1);
-		joined    = next;
+		else {
+			if (!joined) {
+				if (color == 0xffffffff)
+					color = 0xff000001;
+				color++;
+			}
+			bool next = polygon && !joined && i + 1 < count && util_uv_tris_quad(posa, inda, i, i + 1);
+			joined    = next;
+		}
 		draw_set_color(color);
 		f32 x1 = (texa->buffer[inda->buffer[i * 3] * 2]) * f;
 		f32 x2 = (texa->buffer[inda->buffer[i * 3 + 1] * 2]) * f;
