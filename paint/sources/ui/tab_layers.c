@@ -408,6 +408,20 @@ void tab_layers_delete_layer(slot_layer_t *l) {
 	g_context->ddirty               = 2;
 	g_context->layers_preview_dirty = true; // Mask slots too
 	tab_layers_remap_all_layer_pointers(pointers);
+
+	bool any = false;
+	for (i32 i = 0; i < g_project->_->layers->length; ++i) {
+		slot_layer_t *s = g_project->_->layers->buffer[i];
+		if (slot_layer_is_layer(s) && !slot_layer_is_filter(s)) {
+			any = true;
+			break;
+		}
+	}
+	if (!any) { // Nothing left: an empty paint layer to keep painting on
+		layers_new_layer(true, 0, NULL);
+		make_material_parse_mesh_material();
+	}
+
 	tab_stages_prune();
 	base_redraw_status();
 }
@@ -567,27 +581,10 @@ bool tab_layers_combo_mask_blending(slot_layer_t *l, bool label) {
 	return changed;
 }
 
+// Everything can be deleted, the last layer and the last folder too. The renderer needs one layer,
+// so deleting the last one leaves a fresh empty Paint Layer (tab_layers_delete_layer).
 bool tab_layers_can_delete(slot_layer_t *l) {
-	i32 num_layers = 0;
-
-	if (slot_layer_is_mask(l) || slot_layer_is_filter(l)) {
-		return true;
-	}
-
-	for (i32 i = 0; i < g_project->_->layers->length; ++i) {
-		slot_layer_t *slot = g_project->_->layers->buffer[i];
-		if (slot_layer_is_layer(slot) && !slot_layer_is_filter(slot)) {
-			++num_layers;
-		}
-	}
-
-	// All layers are in one group
-	if (slot_layer_is_group(l) && slot_layer_get_children(l) != NULL && slot_layer_get_children(l)->length == num_layers) {
-		return false;
-	}
-
-	// Do not delete last layer
-	return num_layers > 1;
+	return l != NULL;
 }
 
 void tab_layers_draw_layer_context_menu_duplicate(void *_) {

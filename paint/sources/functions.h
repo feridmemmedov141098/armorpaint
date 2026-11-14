@@ -90,6 +90,7 @@ bool                  slot_layer_can_move_into_group(slot_layer_t *raw, slot_lay
 void                  slot_layer_move_into_group(slot_layer_t *raw, slot_layer_t *group);
 void                  slot_layer_move_to_group_bottom(slot_layer_t *raw, slot_layer_t *group);
 void                  tab_layers_group_selection(void);
+void                  tab_layers_delete_layer(slot_layer_t *l);
 bool                  tab_layers_is_selected(slot_layer_t *l);
 void                  layers_init();
 void                  layers_init_default_stack(void *_);

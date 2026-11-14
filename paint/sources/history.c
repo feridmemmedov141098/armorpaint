@@ -1024,7 +1024,9 @@ history_step_t *history_delete_layer(slot_layer_t *l) {
 		array_remove(layers, step->merge_layers->buffer[i]);
 	}
 	tab_timeline_sync();
-	context_set_layer(layers->buffer[start > 0 ? start - 1 : 0]);
+	if (layers->length > 0) { // Empty after deleting everything, tab_layers_delete_layer adds a new layer
+		context_set_layer(layers->buffer[start > 0 ? start - 1 : 0]);
+	}
 	return step;
 }
 
