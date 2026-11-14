@@ -599,6 +599,9 @@ extern void (*ui_nodes_on_link_drag)(int, bool);
 extern void (*ui_nodes_on_node_remove)(ui_node_t *);
 extern void (*ui_nodes_on_node_changed)(ui_node_t *);
 extern bool ui_nodes_grid_snap;
+extern bool ui_nodes_redraw_request;
+extern bool ui_nodes_grab_eat_release_r;
+void        ui_nodes_start_grab(ui_nodes_t *nodes, ui_node_canvas_t *canvas);
 
 void     ui_node_canvas_encode(ui_node_canvas_t *canvas);
 uint32_t ui_node_canvas_encoded_size(ui_node_canvas_t *canvas);

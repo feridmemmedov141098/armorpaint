@@ -125,9 +125,106 @@ void ui_viewnodes_on_link_drag_on_node_search_done() {
 
 static char *_ui_nodes_node_search_text = "";
 
+// Spawns n under the cursor, it follows the cursor until a left click places it (Esc or right click removes the move)
+static void ui_nodes_spawn_node(ui_node_t *n) {
+	ui_nodes_push_undo(NULL);
+	ui_nodes_t       *nodes    = ui_nodes_get_nodes();
+	ui_node_canvas_t *canvas   = ui_nodes_get_canvas(true);
+	ui_nodes_node_search_spawn = ui_nodes_make_node(n, nodes, canvas);
+	any_array_push(canvas->nodes, ui_nodes_node_search_spawn);
+	nodes->nodes_selected_id = i32_array_create_from_raw((i32[]){ui_nodes_node_search_spawn->id}, 1);
+	ui_nodes_start_grab(nodes, canvas);
+	ui_nodes_hwnd->redraws = 2;
+	if (_ui_nodes_node_search_done != NULL) {
+		_ui_nodes_node_search_done();
+	}
+}
+
+// Add menu categories. Material nodes get a finer split than the bar above the editor.
+static char *ui_nodes_menu_material_categories[] = {"Input", "Layer", "Texture", "Bake", "Color", "Converter", "Vector", "Utilities", "Neural", "Group"};
+
+static bool ui_nodes_type_in(char *type, char **types, i32 count) {
+	for (i32 i = 0; i < count; ++i) {
+		if (string_equals(type, types[i])) {
+			return true;
+		}
+	}
+	return false;
+}
+
+static i32 ui_nodes_add_menu_category(i32 list_index, ui_node_t_array_t *list, ui_node_t *n) {
+	if (ui_nodes_canvas_type != CANVAS_TYPE_MATERIAL) {
+		return list_index;
+	}
+#if defined(IRON_WINDOWS) || defined(IRON_LINUX) || defined(IRON_MACOS)
+	if (list == nodes_material_neural) {
+		return 8;
+	}
+#endif
+	if (list == nodes_material_group) {
+		return 9;
+	}
+	char *t                 = n->type;
+	char *input[]           = {"ATTRIBUTE", "RGB", "NEW_GEOMETRY", "OBJECT_INFO", "TEX_COORD", "UVMAP", "VALUE", "WIREFRAME"};
+	char *layer[]           = {"LAYER", "LAYER_MASK", "MATERIAL", "PICKER"};
+	char *bake[]            = {"TEX_BAKE", "BAKE_CURVATURE"};
+	char *color[]           = {"BLUR", "BRIGHTCONTRAST", "COLMASK", "VALTORGB", "GAMMA", "HUE_SAT", "INVERT_COLOR", "MIX_RGB", "QUANTIZE", "CURVE_RGB", "REPLACECOL", "DIRECT_WARP"};
+	char *converter[]       = {"COMBINE_COLOR", "SEPARATE_COLOR", "RGBTOBW", "COMBXYZ", "SEPXYZ", "MATH", "MAPRANGE", "CLAMP", "FLOAT_CURVE"};
+	char *vector[]          = {"BUMP", "MAPPING", "MIX_NORMAL_MAP", "NORMAL", "NORMAL_MAP", "CURVE_VEC", "VECT_MATH", "VECT_ROTATE", "VECT_TRANSFORM"};
+	if (ui_nodes_type_in(t, input, 8)) return 0;
+	if (ui_nodes_type_in(t, layer, 4)) return 1;
+	if (ui_nodes_type_in(t, bake, 2)) return 3;
+	if (starts_with(t, "TEX_")) return 2;
+	if (ui_nodes_type_in(t, color, 12)) return 4;
+	if (ui_nodes_type_in(t, converter, 9)) return 5;
+	if (ui_nodes_type_in(t, vector, 9)) return 6;
+	return 7; // Script, shader, tilesheets and nodes added by scripts
+}
+
+static void ui_nodes_node_category_menu() {
+	node_list_t_array_t *node_list = ui_nodes_get_node_list();
+	bool                 material  = ui_nodes_canvas_type == CANVAS_TYPE_MATERIAL;
+	string_array_t      *cats      = ui_nodes_get_categories();
+	i32                  cat_count = material ? 10 : cats->length;
+	i32                  shown     = 0;
+	for (i32 c = 0; c < cat_count; ++c) {
+		i32 count = 0;
+		for (i32 i = 0; i < node_list->length; ++i) {
+			ui_node_t_array_t *list = node_list->buffer[i];
+			for (i32 j = 0; j < list->length; ++j) {
+				if (ui_nodes_add_menu_category(i, list, list->buffer[j]) == c) {
+					count++;
+				}
+			}
+		}
+		if (count == 0) {
+			continue;
+		}
+		shown++;
+		char *name = material ? ui_nodes_menu_material_categories[c] : cats->buffer[c];
+		if (ui_menu_sub_button(tr(name))) {
+			ui_menu_sub_begin(count);
+			for (i32 i = 0; i < node_list->length; ++i) {
+				ui_node_t_array_t *list = node_list->buffer[i];
+				for (i32 j = 0; j < list->length; ++j) {
+					ui_node_t *n = list->buffer[j];
+					if (ui_nodes_add_menu_category(i, list, n) == c && ui_menu_button(tr(n->name), "", ICON_NONE)) {
+						ui_nodes_spawn_node(n);
+					}
+				}
+			}
+			ui_menu_sub_end();
+		}
+	}
+	ui_menu_h = UI_ELEMENT_H() * (shown + 1);
+}
+
 void ui_nodes_node_search_menu() {
 	ui_menu_h            = UI_ELEMENT_H() * 8;
 	char *search         = to_lower_case(ui_text_input(&_ui_nodes_node_search_text, "", UI_ALIGN_LEFT, true, true));
+	if (g_ui->is_hovered) {
+		ui_tooltip(tr("Type to search"));
+	}
 	bool  search_changed = ui_item_changed();
 	g_ui->changed        = false;
 	if (_ui_nodes_node_search_first) {
@@ -138,6 +235,12 @@ void ui_nodes_node_search_menu() {
 
 	if (search_changed) {
 		ui_nodes_node_search_offset = 0;
+	}
+
+	// Nothing typed: the nodes by category
+	if (string_equals(search, "")) {
+		ui_nodes_node_category_menu();
+		return;
 	}
 
 	if (g_ui->is_key_pressed) { // Move selection
@@ -166,25 +269,10 @@ void ui_nodes_node_search_menu() {
 				g_theme->BUTTON_COL = count == ui_nodes_node_search_offset ? g_theme->HIGHLIGHT_COL : g_theme->SEPARATOR_COL;
 
 				if (ui_button(tr(n->name), UI_ALIGN_LEFT, "") || (enter && count == ui_nodes_node_search_offset)) {
-					ui_nodes_push_undo(NULL);
-					ui_nodes_t       *nodes    = ui_nodes_get_nodes();
-					ui_node_canvas_t *canvas   = ui_nodes_get_canvas(true);
-					ui_nodes_node_search_spawn = ui_nodes_make_node(n, nodes, canvas); // Spawn selected node
-					any_array_push(canvas->nodes, ui_nodes_node_search_spawn);
-					nodes->nodes_selected_id = i32_array_create_from_raw(
-					    (i32[]){
-					        ui_nodes_node_search_spawn->id,
-					    },
-					    1);
-					nodes->nodes_drag = true;
-
-					ui_nodes_hwnd->redraws = 2;
+					ui_nodes_spawn_node(n);
 					if (enter) {
 						g_ui->changed = true;
 						count         = 6; // Trigger break
-					}
-					if (_ui_nodes_node_search_done != NULL) {
-						_ui_nodes_node_search_done();
 					}
 				}
 				if (++count > 6) {
@@ -440,6 +528,10 @@ void ui_viewnodes_on_canvas_context_menu() {
 }
 
 void ui_viewnodes_on_canvas_released() {
+	if (ui_nodes_grab_eat_release_r && g_ui->input_released_r) { // That right click cancelled a grab
+		ui_nodes_grab_eat_release_r = false;
+		return;
+	}
 	if (g_ui->input_released_r && context_in_nodes() && math_abs(g_ui->input_x - g_ui->input_started_x) < 2 &&
 	    math_abs(g_ui->input_y - g_ui->input_started_y) < 2) {
 
@@ -841,6 +933,9 @@ static void ui_nodes_center_view(ui_nodes_t *nodes, ui_node_canvas_t *canvas, f3
 	if (canvas == NULL || canvas->nodes->length == 0 || ui_nodes_ww <= 0 || ui_nodes_wh <= 0) {
 		return;
 	}
+	nodes->zoom = 1.0 / 1.5; // Opens 1.5x farther out than 100%
+	nodes->uiw  = ui_nodes_ww;
+	nodes->uih  = ui_nodes_wh;
 	f32 x0           = 1e9;
 	f32 y0           = 1e9;
 	f32 x1           = -1e9;
@@ -1064,6 +1159,9 @@ void ui_nodes_update(void *_) {
 
 		ui_node_canvas(ui_nodes, c);
 		g_ui->input_enabled = _input_enabled;
+		if (ui_nodes_redraw_request) { // Grab, edge pan or zoom easing continues without input
+			ui_nodes_hwnd->redraws = 2;
+		}
 
 		if (ui_nodes_popup_changed) {
 			ui_nodes_popup_changed = false;

@@ -40,6 +40,20 @@ void (*ui_nodes_on_node_remove)(ui_node_t *)             = NULL;
 void (*ui_nodes_on_node_changed)(ui_node_t *)            = NULL;
 bool ui_nodes_grid_snap                                  = true;
 int  ui_nodes_grid_snap_w                                = 40;
+bool ui_nodes_redraw_request                             = false; // Grab, edge pan or zoom animation running, redraw the canvas next frame
+bool ui_nodes_grab_eat_release_r                         = false; // A right click cancelled the grab, its release opens no menu
+
+// Grab (G), like Blender: selected nodes follow the cursor, left click places, Esc or right click puts them back
+static bool  ui_nodes_grab       = false;
+static int   ui_nodes_grab_count = 0;
+static int   ui_nodes_grab_ids[256];
+static float ui_nodes_grab_x[256];
+static float ui_nodes_grab_y[256];
+
+// Eased zoom toward the cursor
+static float ui_nodes_zoom_target = -1.0;
+static float ui_nodes_zoom_ax     = 0.0;
+static float ui_nodes_zoom_ay     = 0.0;
 
 int ui_popup_x                                    = 0;
 int ui_popup_y                                    = 0;
@@ -457,6 +471,25 @@ static int ui_insert_link_id = -1;
 static int ui_insert_node_id = -1;
 static int ui_insert_in      = -1;
 static int ui_insert_out     = -1;
+
+void ui_nodes_start_grab(ui_nodes_t *nodes, ui_node_canvas_t *canvas) {
+	ui_nodes_grab_count = 0;
+	for (int i = 0; i < nodes->nodes_selected_id->length && ui_nodes_grab_count < 256; ++i) {
+		ui_node_t *n = ui_get_node(canvas->nodes, nodes->nodes_selected_id->buffer[i]);
+		if (n != NULL) {
+			ui_nodes_grab_ids[ui_nodes_grab_count] = n->id;
+			ui_nodes_grab_x[ui_nodes_grab_count]   = n->x;
+			ui_nodes_grab_y[ui_nodes_grab_count]   = n->y;
+			ui_nodes_grab_count++;
+		}
+	}
+	if (ui_nodes_grab_count == 0) {
+		return;
+	}
+	ui_nodes_grab     = true;
+	nodes->nodes_drag = true;
+	nodes->dragged    = true;
+}
 
 bool ui_is_selected(ui_node_t *node) {
 	for (int i = 0; i < current_nodes->nodes_selected_id->length; ++i) {
@@ -996,22 +1029,100 @@ void ui_node_canvas(ui_nodes_t *nodes, ui_node_canvas_t *canvas) {
 		current_nodes->pan_y += controls->pan_y / UI_NODES_SCALE();
 	}
 
-	// Zoom canvas
+	// Zoom canvas: each step sets a target, the zoom eases to it and keeps the point under the cursor in place
+	ui_nodes_redraw_request = false;
 	if (current->input_enabled && controls->zoom != 0.0) {
-		current_nodes->zoom += controls->zoom;
-		if (current_nodes->zoom < 0.1) {
-			current_nodes->zoom = 0.1;
+		if (ui_nodes_zoom_target < 0.0) {
+			ui_nodes_zoom_target = current_nodes->zoom;
 		}
-		else if (current_nodes->zoom > 1.0) {
-			current_nodes->zoom = 1.0;
+		ui_nodes_zoom_target *= 1.0 + controls->zoom * 1.5;
+		ui_nodes_zoom_target = ui_nodes_zoom_target < 0.1 ? 0.1 : ui_nodes_zoom_target > 1.0 ? 1.0 : ui_nodes_zoom_target;
+		ui_nodes_zoom_ax     = current->input_x;
+		ui_nodes_zoom_ay     = current->input_y;
+	}
+	if (ui_nodes_zoom_target >= 0.0) {
+		float z0 = current_nodes->zoom;
+		float z1 = z0 + (ui_nodes_zoom_target - z0) * 0.35;
+		if (fabs(ui_nodes_zoom_target - z1) < 0.002) {
+			z1                   = ui_nodes_zoom_target;
+			ui_nodes_zoom_target = -1.0;
 		}
-		current_nodes->zoom = round(current_nodes->zoom * 100.0) / 100.0;
-		current_nodes->uiw  = current->_w;
-		current_nodes->uih  = current->_h;
-		if (ui_touch_control) {
-			// Zoom to finger location
-			current_nodes->pan_x -= (current->input_x - current->_window_x - current->_window_w / 2.0) * controls->zoom * 5.0 * (1.0 - current_nodes->zoom);
-			current_nodes->pan_y -= (current->input_y - current->_window_y - current->_window_h / 2.0) * controls->zoom * 5.0 * (1.0 - current_nodes->zoom);
+		else {
+			ui_nodes_redraw_request = true;
+		}
+		// screen = (canvas + pan) * scale * zoom + (1 - zoom) * size / 2.5
+		float s          = UI_SCALE();
+		float uiw0       = current_nodes->uiw;
+		float uih0       = current_nodes->uih;
+		current_nodes->uiw = current->_w;
+		current_nodes->uih = current->_h;
+		float cx         = (ui_nodes_zoom_ax - wx - (1.0 - z0) * uiw0 / 2.5) / (s * z0) - current_nodes->pan_x;
+		float cy         = (ui_nodes_zoom_ay - wy - (1.0 - z0) * uih0 / 2.5) / (s * z0) - current_nodes->pan_y;
+		current_nodes->zoom  = z1;
+		current_nodes->pan_x = (ui_nodes_zoom_ax - wx - (1.0 - z1) * current_nodes->uiw / 2.5) / (s * z1) - cx;
+		current_nodes->pan_y = (ui_nodes_zoom_ay - wy - (1.0 - z1) * current_nodes->uih / 2.5) / (s * z1) - cy;
+	}
+
+	// G grabs the selected nodes
+	bool over_canvas  = ui_input_in_rect(current->_window_x, current->_window_y, current->_window_w, current->_window_h);
+	bool grab_confirm = false;
+	if (!ui_nodes_grab && current->input_enabled && !current->is_typing && current->is_key_pressed && current->key_code == KEY_CODE_G &&
+	    !current->is_ctrl_down && !current->is_shift_down && !current->is_alt_down && over_canvas && current_nodes->link_drag_id == -1) {
+		ui_nodes_start_grab(current_nodes, canvas);
+	}
+	if (ui_nodes_grab) {
+		ui_nodes_redraw_request  = true;
+		current_nodes->nodes_drag = true;
+		current_nodes->dragged    = true;
+		if (current->is_escape_down || current->input_started_r) { // Cancel, nodes back in place
+			for (int i = 0; i < ui_nodes_grab_count; ++i) {
+				ui_node_t *n = ui_get_node(canvas->nodes, ui_nodes_grab_ids[i]);
+				if (n != NULL) {
+					n->x = ui_nodes_grab_x[i];
+					n->y = ui_nodes_grab_y[i];
+				}
+			}
+			ui_nodes_grab_eat_release_r = current->input_started_r;
+			current->is_escape_down     = false;
+			ui_nodes_grab               = false;
+			current_nodes->nodes_drag   = false;
+		}
+		else if (current->input_started) { // Place
+			ui_nodes_grab           = false;
+			grab_confirm            = true;
+			current->input_started  = false; // The click only places, no selection or box select
+			current->changed        = true;
+		}
+	}
+
+	// Dragging nodes or a link near the canvas border pans the view there, dragged nodes stay under the cursor
+	if ((current_nodes->nodes_drag && current_nodes->dragged) || current_nodes->link_drag_id != -1) {
+		float margin = 40.0 * UI_SCALE();
+		float speed  = 14.0 * UI_SCALE();
+		float ex     = 0.0;
+		float ey     = 0.0;
+		float left   = current->_window_x + margin;
+		float right  = current->_window_x + current->_window_w - margin;
+		float top    = current->_window_y + margin;
+		float bottom = current->_window_y + current->_window_h - margin;
+		if (current->input_x < left) ex = fmin((left - current->input_x) / margin, 1.0) * speed;
+		if (current->input_x > right) ex = -fmin((current->input_x - right) / margin, 1.0) * speed;
+		if (current->input_y < top) ey = fmin((top - current->input_y) / margin, 1.0) * speed;
+		if (current->input_y > bottom) ey = -fmin((current->input_y - bottom) / margin, 1.0) * speed;
+		if (ex != 0.0 || ey != 0.0) {
+			float sc = UI_SCALE() * current_nodes->zoom;
+			current_nodes->pan_x += ex / sc;
+			current_nodes->pan_y += ey / sc;
+			if (current_nodes->nodes_drag) {
+				for (int i = 0; i < current_nodes->nodes_selected_id->length; ++i) {
+					ui_node_t *n = ui_get_node(canvas->nodes, current_nodes->nodes_selected_id->buffer[i]);
+					if (n != NULL) {
+						n->x -= ex / sc;
+						n->y -= ey / sc;
+					}
+				}
+			}
+			ui_nodes_redraw_request = true;
 		}
 	}
 	current_nodes->scale_factor = UI_SCALE();
@@ -1073,7 +1184,8 @@ void ui_node_canvas(ui_nodes_t *nodes, ui_node_canvas_t *canvas) {
 	}
 
 	// Dropped into the link: from -> node -> to
-	if (current->input_released && ui_insert_link_id != -1) {
+	bool drop_now = grab_confirm || (current->input_released && !ui_nodes_grab);
+	if (drop_now && ui_insert_link_id != -1) {
 		ui_node_link_t *l = ui_get_link(canvas->links, ui_insert_link_id);
 		if (l != NULL) {
 			int to_id    = l->to_id;
@@ -1088,6 +1200,10 @@ void ui_node_canvas(ui_nodes_t *nodes, ui_node_canvas_t *canvas) {
 			}
 		}
 		ui_insert_link_id = -1;
+	}
+	if (grab_confirm) {
+		current_nodes->nodes_drag = false;
+		current_nodes->dragged    = false;
 	}
 
 	for (int i = 0; i < canvas->links->length; ++i) {
@@ -1326,7 +1442,7 @@ void ui_node_canvas(ui_nodes_t *nodes, ui_node_canvas_t *canvas) {
 			}
 			current_nodes->snap_to_id = current_nodes->snap_from_id = -1;
 			current_nodes->link_drag_id                             = -1;
-			current_nodes->nodes_drag                               = false;
+			current_nodes->nodes_drag                               = ui_nodes_grab; // A grab keeps following the cursor
 		}
 
 		if (current_nodes->nodes_drag && ui_is_selected(node) && !current->input_down_r) {
@@ -1339,7 +1455,7 @@ void ui_node_canvas(ui_nodes_t *nodes, ui_node_canvas_t *canvas) {
 				// node->y = (current->input_y - current->_window_y - UI_NODES_PAN_Y()) / UI_NODES_SCALE();
 			}
 		}
-		if (ui_nodes_grid_snap && current->input_released && ui_is_selected(node)) {
+		if (ui_nodes_grid_snap && (current->input_released || grab_confirm) && ui_is_selected(node)) {
 			node->x = ui_nodes_snap(node->x) / UI_NODES_SCALE();
 			node->y = ui_nodes_snap(node->y) / UI_NODES_SCALE();
 		}
