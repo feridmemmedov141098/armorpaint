@@ -446,6 +446,24 @@ void base_update(void *_) {
 
 	base_handle_drop_paths();
 
+	// X on a paint mask swaps the brush between white and black, like in Substance Painter.
+	// The node editor keeps X for deleting nodes.
+	if (keyboard_started("x") && !keyboard_down("control") && !g_ui->is_typing && !context_in_nodes() && g_context->layer != NULL &&
+	    slot_layer_is_mask(g_context->layer) && g_context->layer->fill_material == NULL && g_context->material != NULL) {
+		ui_node_canvas_t *c = g_context->material->canvas;
+		for (i32 i = 0; i < c->nodes->length; ++i) {
+			ui_node_t *n = c->nodes->buffer[i];
+			if (string_equals(n->type, "OUTPUT_MASK") && n->inputs->length > 0) {
+				f32 *v = &n->inputs->buffer[0]->default_value->buffer[0];
+				*v     = *v > 0.5 ? 0.0 : 1.0;
+				make_material_parse_paint_material(true);
+				console_info(*v > 0.5 ? tr("Mask brush: white") : tr("Mask brush: black"));
+				ui_dock_redraw(-1);
+				break;
+			}
+		}
+	}
+
 	if (g_context->tool == TOOL_TYPE_CURSOR && context_in_3d_view() && !context_object_deselected()) {
 		if (keyboard_down("control") && keyboard_started("d")) {
 			util_mesh_duplicate();
