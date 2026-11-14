@@ -432,6 +432,17 @@ char *parser_material_get_coord(ui_node_t *node) {
 	if (parser_material_uv_coord) {
 		return "float3(tex_coord.x, tex_coord.y, 0.0)";
 	}
+	// Triplanar: a 2D pattern reads the projection of the axis the surface faces most (box mapping).
+	// A blended bposition is a 3D position again, which 2D patterns like Brick stretch on two of the axes.
+	if (parser_material_triplanar) {
+		node_shader_t *kong = parser_material_kong;
+		if (string_index_of(string_buffer_get(&kong->frag_attribs), "float3 tri_co") < 0) { // Once per shader
+			node_shader_write_attrib_frag(kong, "float3 tri_co = float3(tex_coord2.x, tex_coord2.y, 0.0);");
+			node_shader_write_attrib_frag(kong, "if (tex_coord_blend.x >= max(tex_coord_blend.y, tex_coord_blend.z)) { tri_co = float3(tex_coord.x, tex_coord.y, 0.0); }");
+			node_shader_write_attrib_frag(kong, "else { if (tex_coord_blend.y >= tex_coord_blend.z) { tri_co = float3(tex_coord1.x, tex_coord1.y, 0.0); } }");
+		}
+		return "tri_co";
+	}
 	parser_material_kong->frag_bposition = true;
 	return "bposition";
 }

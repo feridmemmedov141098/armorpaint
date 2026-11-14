@@ -680,6 +680,7 @@ bool                   script_layer_set_group(slot_layer_t *l, slot_layer_t *gro
 void                   script_layer_set_object(slot_layer_t *l, object_t *object);
 void                   script_layer_set_name(slot_layer_t *l, char *name);
 void                   script_layer_update(slot_layer_t *l);
+void                   script_layer_set_uv_type(slot_layer_t *l, i32 uv_type);
 slot_layer_t          *script_layer_duplicate(slot_layer_t *l);
 slot_layer_t          *script_layer_merge_down(slot_layer_t *l);
 slot_layer_t          *script_layer_merge_group(slot_layer_t *group);

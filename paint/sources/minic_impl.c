@@ -816,6 +816,14 @@ void script_layer_set_name(slot_layer_t *l, char *name) {
 	ui_dock_redraw(TAB_AREA_SIDEBAR0);
 }
 
+// Projection of a fill layer: 0 UV Map, 1 Triplanar, 2 Project. Takes effect on script_layer_update.
+void script_layer_set_uv_type(slot_layer_t *l, i32 uv_type) {
+	if (!script_layer_valid(l) || uv_type < 0 || uv_type > 2) {
+		return;
+	}
+	l->uv_type = uv_type;
+}
+
 void script_layer_update(slot_layer_t *l) {
 	if (!script_layer_valid(l)) {
 		return;
