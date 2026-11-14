@@ -47,6 +47,30 @@ static bool slot_layer_is_unique_name(slot_layer_t *self, char *name) {
 	return true;
 }
 
+// "Fill Layer", then "Fill Layer 2", "Fill Layer 3"..
+static char *slot_layer_type_name(slot_layer_t *self, char *base) {
+	if (slot_layer_is_unique_name(self, base)) {
+		return string_copy(base);
+	}
+	for (i32 n = 2;; ++n) {
+		char *name = string_tmp("%s %d", base, n);
+		if (slot_layer_is_unique_name(self, name)) {
+			return string_copy(name);
+		}
+	}
+}
+
+// A layer named after its type gets the name of its new type: Paint Layer 2 becomes Fill Layer 3. Renamed layers keep their name.
+static void slot_layer_retype_name(slot_layer_t *raw, char *from, char *to) {
+	if (!starts_with(raw->name, from)) {
+		return;
+	}
+	char *name = slot_layer_type_name(raw, to);
+	tab_stages_rename_layer(raw->name, name);
+	raw->name = name;
+	ui_dock_redraw(TAB_AREA_SIDEBAR0);
+}
+
 char *slot_layer_unique_name(slot_layer_t *self, char *name) {
 	if (slot_layer_is_unique_name(self, name)) {
 		return name;
@@ -117,7 +141,7 @@ slot_layer_t *slot_layer_create(char *ext, layer_slot_type_t type, slot_layer_t 
 	}
 	else if (type == LAYER_SLOT_TYPE_LAYER) {
 		i32 id    = (raw->id + 1);
-		raw->name = string("Layer %d", id);
+		raw->name = string_equals(raw->ext, string("%d", raw->id)) ? slot_layer_type_name(raw, "Paint Layer") : string("Layer %d", id);
 
 		if (!slot_layer_defer_alloc) {
 			slot_layer_alloc_textures(raw);
@@ -639,6 +663,9 @@ void slot_layer_to_fill_layer(slot_layer_t *raw) {
 	}
 	g_context->material = own;
 	raw->fill_material  = own;
+	if (slot_layer_is_layer(raw) && !slot_layer_is_filter(raw)) {
+		slot_layer_retype_name(raw, "Paint Layer", "Fill Layer");
+	}
 	layers_update_fill_layer(true);
 	sys_notify_on_next_frame(&slot_layer_to_fill_layer_on_next_frame, NULL);
 }
@@ -646,6 +673,9 @@ void slot_layer_to_fill_layer(slot_layer_t *raw) {
 void slot_layer_to_paint_layer(slot_layer_t *raw) {
 	context_set_layer(raw);
 	raw->fill_material = NULL;
+	if (slot_layer_is_layer(raw) && !slot_layer_is_filter(raw)) {
+		slot_layer_retype_name(raw, "Fill Layer", "Paint Layer");
+	}
 	if (raw->path_material != NULL) {
 		raw->path_material = NULL;
 		raw->path_points   = NULL;

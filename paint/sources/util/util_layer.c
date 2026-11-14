@@ -147,13 +147,7 @@ void layers_init_default_stack(void *_) {
 	slot_layer_make_owned_material(base, NULL);
 	slot_layer_to_fill_layer(base);
 	util_render_make_material_preview(); // Icon of the fill layer
-	tab_stages_rename_layer(base->name, "Fill Layer");
-	base->name          = "Fill Layer";
-	slot_layer_t *paint = layers_new_layer(true, -1, NULL); // Above the fill layer, cleared on the next frame
-	if (paint != NULL) {
-		tab_stages_rename_layer(paint->name, "Paint Layer");
-		paint->name = "Paint Layer";
-	}
+	layers_new_layer(true, -1, NULL); // Paint Layer above the Fill Layer, cleared on the next frame
 	make_material_parse_mesh_material();
 	g_context->layers_preview_dirty = true; // Icons of both layers
 	ui_dock_redraw(TAB_AREA_SIDEBAR0);
