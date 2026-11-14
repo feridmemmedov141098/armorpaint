@@ -325,7 +325,7 @@ static void smart_material_apply_on_next_frame(void *_) {
 	i32          tex_count  = d->textures != NULL ? d->textures->length : 0;
 	i32_array_t *tex_assets = i32_array_create(tex_count > 0 ? tex_count : 1);
 	for (i32 i = 0; i < tex_count; ++i) {
-		char *path             = string("%s%s%s", files_dir, PATH_SEP, d->textures->buffer[i]);
+		char *path             = string("%s/%s", files_dir, d->textures->buffer[i]);
 		tex_assets->buffer[i]  = 9999; // Pink when missing
 		if (!iron_file_exists(path)) {
 			continue;

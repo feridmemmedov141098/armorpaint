@@ -193,7 +193,8 @@ static uint32_t traverse(int di, bool count_arrays) {
 	case 0xdb: {                   // string
 		uint32_t len = read_u32(); // string_length
 		ei += len;
-		len += 1; // '\0'
+		len += 1;                  // '\0'
+		len += pad(len, PTR_SIZE); // store_string pads the bottom after each string, counting without it overflowed the buffer
 		if (!count_arrays) {
 			len = 0;
 		}

@@ -744,7 +744,7 @@ void make_dirt_ao_bake(ui_node_t *node, ui_node_canvas_t *group, ui_node_t_array
 	if (image != NULL) {
 		gpu_delete_texture(image);
 	}
-	image = gpu_create_texture_from_bytes(&b, res_x, res_y, GPU_TEXTURE_FORMAT_RGBA32);
+	image = gpu_create_texture_from_bytes_raw(&b, res_x, res_y, GPU_TEXTURE_FORMAT_RGBA32); // Data, not compressed (like the curvature)
 	any_map_set(g_context->node_previews, string_copy(id), image);
 	free(white);
 }

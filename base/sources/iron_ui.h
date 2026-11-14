@@ -601,6 +601,7 @@ extern void (*ui_nodes_on_node_changed)(ui_node_t *);
 extern bool ui_nodes_grid_snap;
 extern bool ui_nodes_redraw_request;
 extern bool ui_nodes_grab_eat_release_r;
+extern bool ui_nodes_grab;
 void        ui_nodes_start_grab(ui_nodes_t *nodes, ui_node_canvas_t *canvas);
 
 void     ui_node_canvas_encode(ui_node_canvas_t *canvas);

@@ -16,6 +16,7 @@ bool              ui_nodes_recompile_mat_final   = false;
 ui_node_t        *ui_nodes_node_search_spawn     = NULL;
 i32               ui_nodes_node_search_offset    = 0;
 ui_node_canvas_t *ui_nodes_last_canvas           = NULL;
+bool              ui_nodes_spawn_undo_done       = false; // Add menu node recorded its undo step, its placement adds none
 i32               ui_nodes_last_node_selected_id = -1;
 bool              ui_nodes_release_link          = false;
 bool              ui_nodes_is_node_menu_op       = false;
@@ -128,6 +129,7 @@ static char *_ui_nodes_node_search_text = "";
 // Spawns n under the cursor, it follows the cursor until a left click places it (Esc or right click removes the move)
 static void ui_nodes_spawn_node(ui_node_t *n) {
 	ui_nodes_push_undo(NULL);
+	ui_nodes_spawn_undo_done = true;
 	ui_nodes_t       *nodes    = ui_nodes_get_nodes();
 	ui_node_canvas_t *canvas   = ui_nodes_get_canvas(true);
 	ui_nodes_node_search_spawn = ui_nodes_make_node(n, nodes, canvas);
@@ -1137,8 +1139,10 @@ void ui_nodes_update(void *_) {
 		f32                  y               = math_fmod(UI_NODES_PAN_Y() + pending_control->pan_y, step) - step;
 		draw_image(ui_nodes_grid, x, y);
 
-		// Undo
-		if (g_ui->input_started || g_ui->is_key_pressed) {
+		// Undo: the canvas before an edit. Not refreshed on the frame that records the edit just finished,
+		// a click on that frame made the step store the edited canvas, so Ctrl+Z did nothing.
+		bool undo_pending = !g_ui->changed && ui_nodes_uichanged_last;
+		if ((g_ui->input_started || g_ui->is_key_pressed) && !undo_pending) {
 			ui_nodes_last_canvas = util_clone_canvas(ui_nodes_get_canvas(true));
 		}
 
@@ -1224,9 +1228,18 @@ void ui_nodes_update(void *_) {
 		}
 		else if (ui_nodes_uichanged_last) {
 			ui_nodes_canvas_changed();
-			ui_nodes_push_undo(ui_nodes_last_canvas);
+			if (ui_nodes_spawn_undo_done) { // Placing a node from the add menu: its step is already recorded
+				ui_nodes_spawn_undo_done = false;
+			}
+			else {
+				ui_nodes_push_undo(ui_nodes_last_canvas);
+			}
+			ui_nodes_last_canvas = util_clone_canvas(ui_nodes_get_canvas(true)); // Before the next edit
 		}
 		ui_nodes_uichanged_last = g_ui->changed;
+		if (!ui_nodes_grab && !g_ui->changed && !ui_nodes_uichanged_last) {
+			ui_nodes_spawn_undo_done = false; // Grab cancelled, no placement follows
+		}
 
 		// Node previews
 		if (g_context->selected_node_preview && ui_nodes->nodes_selected_id->length > 0) {

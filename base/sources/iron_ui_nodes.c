@@ -44,7 +44,7 @@ bool ui_nodes_redraw_request                             = false; // Grab, edge 
 bool ui_nodes_grab_eat_release_r                         = false; // A right click cancelled the grab, its release opens no menu
 
 // Grab (G), like Blender: selected nodes follow the cursor, left click places, Esc or right click puts them back
-static bool  ui_nodes_grab       = false;
+bool         ui_nodes_grab       = false; // G or a spawned node follows the cursor
 static int   ui_nodes_grab_count = 0;
 static int   ui_nodes_grab_ids[256];
 static float ui_nodes_grab_x[256];
@@ -1474,6 +1474,9 @@ void ui_node_canvas(ui_nodes_t *nodes, ui_node_canvas_t *canvas) {
 			}
 			current_nodes->snap_to_id = current_nodes->snap_from_id = -1;
 			current_nodes->link_drag_id                             = -1;
+			if (current_nodes->nodes_drag && current_nodes->dragged && !ui_nodes_grab) {
+				current->changed = true; // Moved with the mouse: an undo step
+			}
 			current_nodes->nodes_drag                               = ui_nodes_grab; // A grab keeps following the cursor
 		}
 
