@@ -1143,6 +1143,10 @@ void tab_layers_draw_layer_slot(slot_layer_t *l, i32 i, bool mini) {
 			}
 		}
 	}
+	// Accent bar on the left edge: fill layers blue, paint layers yellow. Folders, masks and filters have none.
+	if (!mini && slot_layer_is_layer(l) && !slot_layer_is_filter(l)) {
+		ui_fill(0, 0, 3, 2 * step, l->fill_material != NULL ? 0xff4a90d9 : 0xffe2c044);
+	}
 	mini ? tab_layers_draw_layer_slot_mini(l, i) : tab_layers_draw_layer_slot_full(l, i);
 
 	tab_layers_draw_layer_highlight(l, mini);
