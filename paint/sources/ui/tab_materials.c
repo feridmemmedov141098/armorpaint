@@ -488,12 +488,18 @@ void tab_materials_draw_full(i32 *htab, char *title) {
 void tab_materials_draw(i32 *htab) {
 	tab_materials_section = 1;
 	bool mini             = g_ui->_window_w <= ui_sidebar_w_mini;
+	bool names            = g_config->show_asset_names;
+	g_config->show_asset_names = !mini; // The shelf always shows names under the thumbnails
 	mini ? tab_materials_draw_mini(htab) : tab_materials_draw_full(htab, tr("Materials"));
+	g_config->show_asset_names = names;
 }
 
 void tab_smart_masks_draw(i32 *htab) {
-	tab_materials_section = 2;
+	tab_materials_section      = 2;
+	bool names                 = g_config->show_asset_names;
+	g_config->show_asset_names = true;
 	tab_materials_draw_full(htab, tr("Smart Masks"));
+	g_config->show_asset_names = names;
 }
 
 void tab_materials_accept_material_drop(slot_material_t *material) {

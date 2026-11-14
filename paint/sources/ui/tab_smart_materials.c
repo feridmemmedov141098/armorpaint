@@ -479,10 +479,19 @@ static void tab_smart_materials_menu() {
 	}
 }
 
+static void tab_smart_materials_draw_grid(void);
+
 void tab_smart_materials_draw(i32 *htab) {
 	if (!ui_tab(htab, tr("Smart Materials"), false, -1, false)) {
 		return;
 	}
+	bool names                 = g_config->show_asset_names;
+	g_config->show_asset_names = true; // Names under the thumbnails
+	tab_smart_materials_draw_grid();
+	g_config->show_asset_names = names;
+}
+
+static void tab_smart_materials_draw_grid(void) {
 	smart_materials_load();
 	if (smart_materials->length == 0) {
 		ui_text(tr("Drag a folder from Layers here to save it as a smart material"), UI_ALIGN_LEFT, 0);
