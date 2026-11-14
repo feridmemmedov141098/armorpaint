@@ -141,7 +141,9 @@ static ui_node_t *project_smart_mask_node(slot_material_t *m, char *type, f32 x,
 	return n;
 }
 
-// Curvature broken up by noise drives the opacity: edge wear on convex edges, dirt in the cavities (inverted curvature)
+// Edge Mask node drives the opacity: curvature edges (dirt: inverted curvature, the cavities) whose reach is
+// moved per point by a grunge noise, so the wear spreads unevenly from the edges instead of a constant-width line.
+// The grunge is the internal noise so the masks work without the library; link any alpha image to Grunge instead.
 static slot_material_t *project_make_smart_mask(char *name, bool dirt) {
 	nodes_material_init();
 	slot_material_t *m = slot_material_create(g_project->_->materials->buffer[0]->data, NULL);
@@ -157,26 +159,28 @@ static slot_material_t *project_make_smart_mask(char *name, bool dirt) {
 		return m;
 	}
 	ui_node_link_t_array_t *links = m->canvas->links;
-	ui_node_t *curv = project_smart_mask_node(m, "BAKE_CURVATURE", out->x - 660, out->y);
+	ui_node_t *curv = project_smart_mask_node(m, "BAKE_CURVATURE", out->x - 700, out->y - 80);
 	curv->buttons->buffer[0]->default_value->buffer[0] = dirt ? 0.0 : 1.0; // Convex only for edges
+	curv->inputs->buffer[1]->default_value->buffer[0]  = 1.5;               // Radius: a soft falloff from the edges for the grunge to move
 	ui_node_t *src = curv;
 	if (dirt) { // 1 - curvature
-		ui_node_t *inv = project_smart_mask_node(m, "MATH", out->x - 440, out->y - 120);
+		ui_node_t *inv = project_smart_mask_node(m, "MATH", out->x - 480, out->y - 200);
 		inv->buttons->buffer[0]->default_value->buffer[0] = 1; // Subtract
 		inv->inputs->buffer[0]->default_value->buffer[0]  = 1.0;
 		any_array_push(links, project_create_node_link(links, curv->id, 0, inv->id, 1));
 		src = inv;
 	}
-	ui_node_t *noise = project_smart_mask_node(m, "TEX_NOISE", out->x - 440, out->y + 120);
-	noise->inputs->buffer[1]->default_value->buffer[0] = dirt ? 4.0 : 12.0; // Scale
-	ui_node_t *mul = project_smart_mask_node(m, "MATH", out->x - 220, out->y);
-	mul->buttons->buffer[0]->default_value->buffer[0] = 2; // Multiply
-	if (mul->buttons->length > 1) {
-		mul->buttons->buffer[1]->default_value->buffer[0] = 1; // Clamp
-	}
-	any_array_push(links, project_create_node_link(links, src->id, 0, mul->id, 0));
-	any_array_push(links, project_create_node_link(links, noise->id, 0, mul->id, 1));
-	any_array_push(links, project_create_node_link(links, mul->id, 0, out->id, 1)); // Opacity: a smart mask
+	ui_node_t *noise = project_smart_mask_node(m, "TEX_NOISE", out->x - 700, out->y + 140);
+	noise->inputs->buffer[1]->default_value->buffer[0] = dirt ? 4.0 : 8.0; // Scale
+	ui_node_t *edge = project_smart_mask_node(m, "EDGE_MASK", out->x - 260, out->y);
+	edge->inputs->buffer[2]->default_value->buffer[0] = dirt ? 0.45 : 0.5;  // Wear Level
+	edge->inputs->buffer[3]->default_value->buffer[0] = dirt ? 0.4 : 0.6;   // Grunge Amount
+	edge->inputs->buffer[4]->default_value->buffer[0] = dirt ? 0.4 : 0.15;  // Softness
+	edge->inputs->buffer[5]->default_value->buffer[0] = dirt ? 0.0 : 0.2;   // Peel
+	edge->inputs->buffer[7]->default_value->buffer[0] = dirt ? 0.3 : 0.0;   // Breakup
+	any_array_push(links, project_create_node_link(links, src->id, 0, edge->id, 0));
+	any_array_push(links, project_create_node_link(links, noise->id, 0, edge->id, 1));
+	any_array_push(links, project_create_node_link(links, edge->id, 0, out->id, 1)); // Opacity: a smart mask
 	return m;
 }
 
@@ -200,6 +204,11 @@ void project_new(bool reset_layers) {
 	g_project->stages          = NULL;
 	g_project->_->translucency = false;
 	project_scripts_trusted    = true;
+
+	// New projects are 16-bit (half float) so height can be negative. An opened 8-bit project stays 8-bit,
+	// the layer menu Bits switch converts either way. To go back to 8-bit by default, change these two lines and globals.h.
+	bool bits_changed = base_bits != TEXTURE_BITS_BITS16;
+	base_bits         = TEXTURE_BITS_BITS16;
 
 	if (g_project->_->layers->length == 0) {
 		any_array_push(g_project->_->layers, slot_layer_create("", LAYER_SLOT_TYPE_LAYER, NULL));
@@ -309,6 +318,9 @@ void project_new(bool reset_layers) {
 			sys_notify_on_next_frame(&project_new_resize_layers, NULL);
 		}
 		sys_notify_on_next_frame(&project_new_reset_layers, NULL);
+	}
+	if (bits_changed) {
+		layers_set_bits(); // Undo layers and any kept layer follow the new bit depth
 	}
 
 	if (in_use)

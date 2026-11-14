@@ -448,10 +448,16 @@ char *parser_material_parse_value(ui_node_t *node, ui_node_socket_t *socket) {
 	return "0.0";
 }
 
+char *parser_material_default_coord();
+
 char *parser_material_get_coord(ui_node_t *node) {
 	if (parser_material_get_input_link(node->inputs->buffer[0]) != NULL) {
 		return parser_material_parse_vector_input(node->inputs->buffer[0]);
 	}
+	return parser_material_default_coord();
+}
+
+char *parser_material_default_coord() {
 	// Nothing connected: follow the layer's projection, the UV map (or Project) as tex_coord, triplanar as blended bposition
 	if (parser_material_uv_coord) {
 		return "float3(tex_coord.x, tex_coord.y, 0.0)";

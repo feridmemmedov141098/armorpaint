@@ -146,7 +146,7 @@ i32              base_default_font_size = 13;
 i32              base_res;
 f32              base_res_x;
 f32              base_res_y;
-i32              base_bits;
+i32              base_bits = TEXTURE_BITS_BITS16; // New projects are 16-bit, see project_new
 string_array_t  *base_drop_paths;
 slot_material_t *base_drag_material = NULL;
 slot_layer_t    *base_drag_layer    = NULL;
@@ -380,6 +380,7 @@ char           *tab_layers_layer_name = "";
 char           *tab_meshes_mesh_name  = "";
 slot_layer_t   *tab_layers_l;
 slot_layer_t   *tab_layers_drop_mask_layer = NULL; // Layer or group whose mask slot is under a dragged material
+slot_layer_t   *tab_layers_drop_into_group = NULL; // Folder whose row is under a dragged layer, the drop puts the layer inside
 asset_t        *tab_alphas_selected          = NULL;  // Alpha picked in the shelf, the brush stamps its shape
 string_array_t *tab_alphas_files             = NULL;  // Images imported from the Alphas tab
 bool            tab_layers_ignore_slot_click = false; // Set for the frame a drag ended in, the release is not a click on a mask slot

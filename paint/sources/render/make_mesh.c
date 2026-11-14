@@ -291,10 +291,13 @@ node_shader_context_t *make_mesh_run(material_t *data, i32 layer_pass) {
 		node_shader_write_frag(kong, "float texpaint_opac;");
 
 		if (make_material_height_used) {
-			node_shader_write_frag(kong, "float height0 = 0.0;");
-			node_shader_write_frag(kong, "float height1 = 0.0;");
-			node_shader_write_frag(kong, "float height2 = 0.0;");
-			node_shader_write_frag(kong, "float height3 = 0.0;");
+			// A later pass starts from the height the earlier passes left (gbuffer2.a), not from 0.
+			// Starting from 0 made the edge of an upper layer compare against nothing, so the relief of the layers below was lost.
+			// The bump of the earlier passes is already in ntex.
+			node_shader_write_frag(kong, "float height0 = height;");
+			node_shader_write_frag(kong, "float height1 = height;");
+			node_shader_write_frag(kong, "float height2 = height;");
+			node_shader_write_frag(kong, "float height3 = height;");
 		}
 
 		if (g_context->draw_wireframe) {
@@ -580,8 +583,8 @@ node_shader_context_t *make_mesh_run(material_t *data, i32 layer_pass) {
 		}
 
 		if (make_material_height_used) {
-			// Also just outside a raised area, so its edge is drawn on both sides
-			node_shader_write_frag(kong, "if (height > 0.0 || height0 + height1 + height2 + height3 > 0.0) {");
+			// Wherever the height changes, raised (positive) or dented (negative)
+			node_shader_write_frag(kong, "if (height0 != height1 || height2 != height3) {");
 			node_shader_write_frag(kong, "float height_dx = height0 - height1;");
 			node_shader_write_frag(kong, "float height_dy = height2 - height3;");
 			// Whiteout blend

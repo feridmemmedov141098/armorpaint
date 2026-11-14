@@ -80,6 +80,16 @@ slot_material_t *slot_material_create(shader_data_t *m, ui_node_canvas_t *c) {
 	}
 	raw->canvas->name = string_copy(slot_material_unique_name(raw->canvas, raw->canvas->name));
 
+	// Height is signed: -1 (dent) .. 1 (bump), 0 is flat. Older materials stored min = 0 on the socket.
+	for (i32 i = 0; i < raw->canvas->nodes->length; ++i) {
+		ui_node_t *n = raw->canvas->nodes->buffer[i];
+		if (string_equals(n->type, "OUTPUT_MATERIAL_PBR") && n->inputs->length > 7) {
+			ui_node_socket_t *s = n->inputs->buffer[7];
+			s->min              = -1.0;
+			s->max              = 1.0;
+		}
+	}
+
 	if (g_config->node_previews) {
 		for (i32 i = 0; i < raw->canvas->nodes->length; ++i) {
 			ui_node_t *n = raw->canvas->nodes->buffer[i];

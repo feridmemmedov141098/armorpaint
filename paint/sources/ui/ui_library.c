@@ -121,7 +121,12 @@ char *ui_library_draw_grid(string_array_t *files, char *selected) {
 			ui_state_t state         = icon != NULL ? ui_sub_image(icon, 0xffffffff, imgw, 0, 0, icon->width, icon->height)
 			                                        : ui_sub_image(resource_get("icons.k"), 0xffffffff, imgw, tile, tile, tile, tile);
 			g_ui->image_scroll_align = true;
+			// Press starts a drag (drop into the node editor makes an Image Texture node), a click without dragging picks
 			if (state == UI_STATE_STARTED && g_ui->input_y > g_ui->_window_y) {
+				base_drag_file      = string_copy(file);
+				base_drag_file_icon = icon;
+			}
+			if (state == UI_STATE_RELEASED && !base_is_dragging && g_ui->input_y > g_ui->_window_y) {
 				picked = file;
 			}
 			if (g_ui->is_hovered) {

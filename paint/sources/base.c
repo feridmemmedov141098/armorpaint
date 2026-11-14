@@ -378,7 +378,7 @@ void base_update(void *_) {
 				}
 				tab_layers_drop_mask_layer = NULL;
 			}
-			else if (!context_in_browser() && !context_in_smart_materials()) {
+			else if (base_is_dragging && !context_in_browser() && !context_in_smart_materials()) { // A click on a library item is not a drop
 				base_drop_x = mouse_x;
 				base_drop_y = mouse_y;
 
@@ -400,9 +400,15 @@ void base_update(void *_) {
 				smart_material_save(base_drag_layer);
 			}
 			else if (context_in_layers() && base_is_dragging) {
-				slot_layer_move(base_drag_layer, g_context->drag_dest);
+				if (tab_layers_drop_into_group != NULL) {
+					slot_layer_move_into_group(base_drag_layer, tab_layers_drop_into_group);
+				}
+				else {
+					slot_layer_move(base_drag_layer, g_context->drag_dest);
+				}
 				make_material_parse_mesh_material();
 			}
+			tab_layers_drop_into_group = NULL;
 			base_drag_layer = NULL;
 		}
 		else if (base_drag_mesh != NULL) {

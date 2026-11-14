@@ -111,7 +111,7 @@ slot_layer_t *slot_layer_create(char *ext, layer_slot_type_t type, slot_layer_t 
 	raw->paint_nor          = true;
 	raw->paint_nor_blend    = true;
 	raw->paint_height       = true;
-	raw->paint_height_blend = true;
+	raw->paint_height_blend = false; // Normal: the layer replaces the height below where it covers (Substance default), on = Add
 	raw->paint_emis         = true;
 	raw->paint_subs         = true;
 	raw->decal_mat          = mat4_identity(); // Decal layer
@@ -992,17 +992,12 @@ void slot_layer_relocate(slot_layer_t *raw, i32 to) {
 	}
 }
 
-void slot_layer_move(slot_layer_t *raw, i32 to) {
-	slot_layer_t *parent;
-	i32           pos;
-	if (!slot_layer_move_target(raw, to, &parent, &pos)) {
-		return;
-	}
-
-	slot_layer_t_array_t *pointers   = tab_layers_init_layer_map();
-	slot_layer_t         *old_parent = raw->parent;
-	i32                   from       = array_index_of(g_project->_->layers, raw);
-	i32                   dest       = pos > from ? pos - 1 : pos + slot_layer_count_descendants(raw);
+// Puts raw (with its descendants) just below the layer at pos, under parent.
+// A folder that ends up empty is kept, like in Substance.
+static void slot_layer_move_apply(slot_layer_t *raw, slot_layer_t *parent, i32 pos) {
+	slot_layer_t_array_t *pointers = tab_layers_init_layer_map();
+	i32                   from     = array_index_of(g_project->_->layers, raw);
+	i32                   dest     = pos > from ? pos - 1 : pos + slot_layer_count_descendants(raw);
 
 	context_set_layer(raw);
 	history_order_layers(dest);
@@ -1010,11 +1005,30 @@ void slot_layer_move(slot_layer_t *raw, i32 to) {
 
 	slot_layer_relocate(raw, dest);
 	raw->parent = parent;
-
-	if (old_parent != NULL && slot_layer_is_group(old_parent) && slot_layer_get_children(old_parent) == NULL) {
-		history_delete_layer(old_parent)->with_prev = true;
-	}
 	context_set_layer(raw);
 
 	tab_layers_remap_all_layer_pointers(pointers);
+}
+
+void slot_layer_move(slot_layer_t *raw, i32 to) {
+	slot_layer_t *parent;
+	i32           pos;
+	if (!slot_layer_move_target(raw, to, &parent, &pos)) {
+		return;
+	}
+	slot_layer_move_apply(raw, parent, pos);
+}
+
+bool slot_layer_can_move_into_group(slot_layer_t *raw, slot_layer_t *group) {
+	return raw != NULL && group != NULL && raw != group && slot_layer_is_group(group) && !slot_layer_is_mask(raw) && !slot_layer_is_filter(raw) &&
+	       !slot_layer_is_descendant(group, raw) && array_index_of(g_project->_->layers, raw) >= 0 && array_index_of(g_project->_->layers, group) >= 0;
+}
+
+// Dropped on a folder row: the layer becomes the top child of that folder, and the folder opens
+void slot_layer_move_into_group(slot_layer_t *raw, slot_layer_t *group) {
+	if (!slot_layer_can_move_into_group(raw, group)) {
+		return;
+	}
+	group->show_panel = true;
+	slot_layer_move_apply(raw, group, array_index_of(g_project->_->layers, group));
 }

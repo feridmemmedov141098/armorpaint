@@ -99,7 +99,7 @@ node_shader_context_t *make_mesh_preview_run(material_t *data, bool viewport) {
 	}
 
 	if (make_material_height_used) {
-		node_shader_write_frag(kong, "if (height > 0.0) {");
+		node_shader_write_frag(kong, "if (height != 0.0) {");
 		node_shader_write_frag(kong, "float height_dx = ddx(height * 2.0);");
 		node_shader_write_frag(kong, "float height_dy = ddy(height * 2.0);");
 		// Whiteout blend

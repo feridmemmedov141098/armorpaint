@@ -1051,7 +1051,7 @@ void tab_layers_draw_layer_context_menu_draw() {
 			channels_changed |= tab_layers_channel_check(&l->paint_met, tr("Metallic"));
 			ui_row2();
 			channels_changed |= tab_layers_channel_check(&l->paint_height, tr("Height"));
-			channels_changed |= tab_layers_channel_check(&l->paint_height_blend, tr("Height Blend"));
+			channels_changed |= tab_layers_channel_check(&l->paint_height_blend, tr("Height Add"));
 			ui_row2();
 			channels_changed |= tab_layers_channel_check(&l->paint_emis, tr("Emission"));
 			channels_changed |= tab_layers_channel_check(&l->paint_subs, tr("Subsurface"));
@@ -1114,7 +1114,12 @@ void tab_layers_draw_layer_slot(slot_layer_t *l, i32 i, bool mini) {
 	// Highlight drag destination
 	f32 absy = g_ui->_window_y + g_ui->_y;
 	if (base_is_dragging && base_drag_layer != NULL && context_in_layers()) {
-		if (mouse_y > absy + step && mouse_y < absy + step * 3) {
+		// Over the lower middle of a folder row: drop into that folder, the whole row is outlined
+		if (mouse_y > absy + step && mouse_y < absy + step * 1.6 && slot_layer_can_move_into_group(base_drag_layer, l)) {
+			tab_layers_drop_into_group = l;
+			ui_rect(checkw, 0, (g_ui->_window_w / (float)UI_SCALE() - 2) - checkw, step * 2, g_theme->HIGHLIGHT_COL, 2);
+		}
+		else if (mouse_y > absy + step && mouse_y < absy + step * 3) {
 			bool down            = array_index_of(g_project->_->layers, base_drag_layer) >= i;
 			g_context->drag_dest = down ? i : i - 1;
 			if (slot_layer_can_move(g_context->layer, g_context->drag_dest)) {
@@ -1157,6 +1162,7 @@ void tab_layers_draw_layer_slot(slot_layer_t *l, i32 i, bool mini) {
 }
 
 void tab_layers_draw_slots(bool mini) {
+	tab_layers_drop_into_group = NULL; // Set again by the folder row under a dragged layer
 	if (!base_is_dragging || !tab_layers_drag_fits_mask() || mini) {
 		tab_layers_drop_mask_layer = NULL;
 	}
