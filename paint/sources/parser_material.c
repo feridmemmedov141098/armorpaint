@@ -120,10 +120,12 @@ shader_out_t *parser_material_parse_shader(ui_node_t *node, ui_node_socket_t *so
 		if (node->buttons->length > 0 && node->buttons->buffer[0]->default_value->buffer[0] > 0.0) { // Invert
 			v = string_tmp("(1.0 - %s)", v);
 		}
+		// Opacity scales the value, a fill mask writes only the value (its alpha is not used)
+		char *opac  = parser_material_parse_value_input(node->inputs->buffer[1], false);
 		char *store = parser_material_store_var_name(node);
-		parser_material_write(parser_material_kong, string_tmp("float %s_mask = clamp(%s, 0.0, 1.0);", store, v));
+		parser_material_write(parser_material_kong, string_tmp("float %s_mask = clamp(%s, 0.0, 1.0) * clamp(%s, 0.0, 1.0);", store, v, opac));
 		sout->out_basecol = string_tmp("float3(%s_mask, %s_mask, %s_mask)", store, store, store);
-		sout->out_opacity = parser_material_parse_value_input(node->inputs->buffer[1], false);
+		sout->out_opacity = "1.0";
 	}
 	return sout;
 }
