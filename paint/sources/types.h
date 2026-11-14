@@ -466,6 +466,7 @@ typedef struct context {
 	f32                         bake_curv_radius;
 	f32                         bake_curv_offset;
 	i32                         bake_curv_smooth;
+	f32                         bake_bevel_radius;
 	i32                         bake_high_poly;
 	bool                        xray;
 	bool                        sym_x;

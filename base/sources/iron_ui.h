@@ -268,6 +268,7 @@ typedef struct ui {
 	int             combo_selected_y;
 	int             combo_selected_w;
 	int             combo_selected_texts_filtered;
+	int             combo_selected_columns;
 	bool            combo_search_bar;
 	ui_id_t         submit_combo_id;
 	int             combo_to_submit;
@@ -322,7 +323,8 @@ char *ui_text_input(char **value, char *label, int align, bool editable, bool li
 bool  ui_check(bool *value, char *text, char *label);
 bool  ui_radio(int *value, int position, char *text, char *label);
 int   ui_combo(int *value, string_array_t *texts, char *label, bool show_label, int align, bool search_bar);
-void  ui_combo_open(ui_id_t id, int value, string_array_t *texts, char *label, int align, bool search_bar);
+int   ui_combo_columns(int *value, string_array_t *texts, char *label, bool show_label, int align, bool search_bar, int columns);
+void  ui_combo_open(ui_id_t id, int value, string_array_t *texts, char *label, int align, bool search_bar, int columns);
 float ui_parse_float(char *text);
 float ui_slider(float *value, char *text, float from, float to, bool filled, float precision, bool display_value, int align, bool text_edit);
 void  ui_row(f32_array_t *ratios);

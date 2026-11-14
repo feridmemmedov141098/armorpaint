@@ -2,6 +2,8 @@
 #include "../global.h"
 
 static tool_type_t      _bake_to_target_tool;
+#define BAKE_TEXTURE_NODE_BEVEL 15 // Bake Mesh Maps' BAKE_TYPE_BEVEL, baked on the cpu
+u8 *bake_maps_bevel_sync(i32 w, i32 h, f32 radius);
 static bake_type_t      _bake_to_target_type;
 static render_target_t *_bake_to_target_rt;
 static render_target_t *_bake_to_target_layer_rt;
@@ -123,6 +125,38 @@ bool bake_to_target(render_target_t *rt, bake_type_t bake_type, void (*done)(voi
 	return true;
 }
 
+static render_target_t *_bake_texture_node_bevel_rt;
+static f32             _bake_texture_node_bevel_radius;
+static bool            _bake_texture_node_bevel_pending;
+
+// Deferred out of the ui pass: drawing into the node target while the ui is being drawn would end
+// the ui's draw pass and send the rest of the interface into this texture
+static void bake_texture_node_bevel_bake(void *_) {
+	render_target_t *rt     = _bake_texture_node_bevel_rt;
+	f32             radius = _bake_texture_node_bevel_radius;
+	_bake_texture_node_bevel_rt      = NULL;
+	_bake_texture_node_bevel_pending = false;
+	if (rt == NULL || rt->_image == NULL) {
+		return;
+	}
+	u8 *px = bake_maps_bevel_sync(rt->width, rt->height, radius);
+	if (px == NULL) {
+		console_error(tr("Unable to bake, check that the mesh has a UV map"));
+		return;
+	}
+	buffer_t       px_buf = {.buffer = px, .length = rt->width * rt->height * 4};
+	gpu_texture_t *tmp    = gpu_create_texture_from_bytes(&px_buf, rt->width, rt->height, GPU_TEXTURE_FORMAT_RGBA32);
+	draw_begin(rt->_image, true, 0xff000000);
+	draw_set_pipeline(pipes_copy);
+	draw_image(tmp, 0, 0);
+	draw_set_pipeline(NULL);
+	draw_end();
+	gpu_delete_texture(tmp);
+	g_context->ddirty       = 2;
+	ui_nodes_hwnd->redraws  = 2;
+	ui_view2d_hwnd->redraws = 2;
+}
+
 static void bake_texture_node_run(ui_node_t *node, int bake_type) {
 	// Dedicated RGBA32 render target per node
 	char            *rt_name = string_tmp("bake_texture_node_%d", node->id);
@@ -140,6 +174,15 @@ static void bake_texture_node_run(ui_node_t *node, int bake_type) {
 		rt->height = config_get_texture_res_y();
 		rt->format = "RGBA32";
 		render_path_create_render_target(rt);
+	}
+	if (bake_type == BAKE_TEXTURE_NODE_BEVEL) { // Cpu bake of Bake Mesh Maps, uploaded on the next frame
+		_bake_texture_node_bevel_rt     = rt;
+		_bake_texture_node_bevel_radius = g_context->bake_bevel_radius;
+		if (!_bake_texture_node_bevel_pending) {
+			_bake_texture_node_bevel_pending = true;
+			sys_notify_on_next_frame(bake_texture_node_bevel_bake, NULL);
+		}
+		return;
 	}
 	bake_to_target(rt, bake_type, NULL, NULL);
 }
@@ -163,20 +206,44 @@ static void bake_texture_node_button(i32 node_id) {
 	        tr("Vertex Color"),
 	    },
 	    10);
+	i32_array_t *bake_types = i32_array_create_from_raw(
+	    (i32[]){
+	        BAKE_TYPE_CURVATURE,
+	        BAKE_TYPE_NORMAL,
+	        BAKE_TYPE_NORMAL_OBJECT,
+	        BAKE_TYPE_HEIGHT,
+	        BAKE_TYPE_DERIVATIVE,
+	        BAKE_TYPE_POSITION,
+	        BAKE_TYPE_TEXCOORD,
+	        BAKE_TYPE_MATERIALID,
+	        BAKE_TYPE_OBJECTID,
+	        BAKE_TYPE_VERTEX_COLOR,
+	    },
+	    10);
 	if (gpu_raytrace_supported()) {
 		any_array_push(bakes, tr("Occlusion"));
 		any_array_push(bakes, tr("Lightmap"));
 		any_array_push(bakes, tr("Bent Normal"));
 		any_array_push(bakes, tr("Thickness"));
+		i32_array_push(bake_types, BAKE_TYPE_OCCLUSION);
+		i32_array_push(bake_types, BAKE_TYPE_LIGHTMAP);
+		i32_array_push(bake_types, BAKE_TYPE_BENT_NORMAL);
+		i32_array_push(bake_types, BAKE_TYPE_THICKNESS);
 	}
+	any_array_push(bakes, tr("Bevel")); // Cpu only, works without raytracing
+	i32_array_push(bake_types, BAKE_TEXTURE_NODE_BEVEL);
 
 	f32_array_t *values    = node->buttons->buffer[0]->default_value;
 	i32          bake_type = (i32)values->buffer[0];
-	if (bake_type >= bakes->length) { // Saved on a machine with raytracing
-		bake_type = 0;
+	i32          selected  = i32_array_index_of(bake_types, bake_type);
+	if (selected < 0) { // Saved on a machine without that map
+		selected = 0;
 	}
 	ui_set_next_id((ui_id_t)&values->buffer[0]);
-	ui_combo(&bake_type, bakes, tr("Bake"), false, UI_ALIGN_LEFT, true);
+	ui_combo_columns(&selected, bakes, tr("Bake"), false, UI_ALIGN_LEFT, true, 2);
+	if (selected >= 0 && selected < bake_types->length) {
+		bake_type = bake_types->buffer[selected];
+	}
 	values->buffer[0] = bake_type;
 	i32 height        = 1;
 
@@ -212,6 +279,11 @@ static void bake_texture_node_button(i32 node_id) {
 		f32 samples = g_context->bake_samples;
 		ui_set_next_id((ui_id_t)&g_context->bake_samples);
 		g_context->bake_samples = math_floor(ui_slider(&samples, tr("Samples"), 1, 512, true, 1, true, UI_ALIGN_RIGHT, true));
+		height++;
+	}
+
+	if (bake_type == BAKE_TEXTURE_NODE_BEVEL) {
+		ui_slider(&g_context->bake_bevel_radius, tr("Radius"), 0.001, 0.5, true, 1000.0, true, UI_ALIGN_RIGHT, true);
 		height++;
 	}
 

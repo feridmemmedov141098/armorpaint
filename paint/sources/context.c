@@ -167,6 +167,7 @@ void context_init() {
 	g_context->bake_curv_radius             = 1.0;
 	g_context->bake_curv_offset             = 0.0;
 	g_context->bake_curv_smooth             = 1;
+	g_context->bake_bevel_radius            = 0.05;
 	g_context->bake_high_poly               = 0;
 	g_context->xray                         = false;
 	g_context->sym_x                        = false;

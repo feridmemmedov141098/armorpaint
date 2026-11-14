@@ -266,7 +266,7 @@ static void ui_node_params_draw_socket(i32 canvas_type, ui_node_t *node, i32 soc
 			string_array_push(texts, g_project->_->assets->buffer[i]->name);
 			any_array_push(images, project_get_image(g_project->_->assets->buffer[i]));
 		}
-		ui_combo_open(ui_node_params_combo_id, asset != NULL ? array_index_of(g_project->_->assets, asset) + 1 : 0, texts, tr("File"), UI_ALIGN_LEFT, true);
+		ui_combo_open(ui_node_params_combo_id, asset != NULL ? array_index_of(g_project->_->assets, asset) + 1 : 0, texts, tr("File"), UI_ALIGN_LEFT, true, 1);
 		g_ui->combo_selected_images = images;
 		array_free(texts); // Copied by the combo
 		free(texts);
