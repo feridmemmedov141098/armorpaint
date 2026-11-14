@@ -1037,8 +1037,10 @@ void ui_node_canvas(ui_nodes_t *nodes, ui_node_canvas_t *canvas) {
 		}
 		ui_nodes_zoom_target *= 1.0 + controls->zoom * 1.5;
 		ui_nodes_zoom_target = ui_nodes_zoom_target < 0.1 ? 0.1 : ui_nodes_zoom_target > 1.0 ? 1.0 : ui_nodes_zoom_target;
-		ui_nodes_zoom_ax     = current->input_x;
-		ui_nodes_zoom_ay     = current->input_y;
+		// Toward the cursor while moving nodes, otherwise straight in, around the view center
+		bool moving          = ui_nodes_grab || (current_nodes->nodes_drag && current_nodes->dragged);
+		ui_nodes_zoom_ax     = moving ? current->input_x : current->_window_x + current->_window_w / 2.0;
+		ui_nodes_zoom_ay     = moving ? current->input_y : current->_window_y + current->_window_h / 2.0;
 	}
 	if (ui_nodes_zoom_target >= 0.0) {
 		float z0 = current_nodes->zoom;
@@ -1095,20 +1097,38 @@ void ui_node_canvas(ui_nodes_t *nodes, ui_node_canvas_t *canvas) {
 		}
 	}
 
-	// Dragging nodes or a link near the canvas border pans the view there, dragged nodes stay under the cursor
+	// Moved nodes (or a dragged link end) near the canvas border pan the view there, the nodes stay under the cursor
 	if ((current_nodes->nodes_drag && current_nodes->dragged) || current_nodes->link_drag_id != -1) {
 		float margin = 40.0 * UI_SCALE();
-		float speed  = 14.0 * UI_SCALE();
+		float speed  = 14.0 / 8.0 * UI_SCALE();
 		float ex     = 0.0;
 		float ey     = 0.0;
 		float left   = current->_window_x + margin;
 		float right  = current->_window_x + current->_window_w - margin;
 		float top    = current->_window_y + margin;
 		float bottom = current->_window_y + current->_window_h - margin;
-		if (current->input_x < left) ex = fmin((left - current->input_x) / margin, 1.0) * speed;
-		if (current->input_x > right) ex = -fmin((current->input_x - right) / margin, 1.0) * speed;
-		if (current->input_y < top) ey = fmin((top - current->input_y) / margin, 1.0) * speed;
-		if (current->input_y > bottom) ey = -fmin((current->input_y - bottom) / margin, 1.0) * speed;
+		// Screen bounds of the moved nodes, the cursor for a link
+		float bx0 = current->input_x;
+		float by0 = current->input_y;
+		float bx1 = bx0;
+		float by1 = by0;
+		if (current_nodes->nodes_drag) {
+			bx0 = by0 = 1e9;
+			bx1 = by1 = -1e9;
+			for (int i = 0; i < current_nodes->nodes_selected_id->length; ++i) {
+				ui_node_t *n = ui_get_node(canvas->nodes, current_nodes->nodes_selected_id->buffer[i]);
+				if (n != NULL) {
+					bx0 = fmin(bx0, wx + UI_NODE_X(n));
+					by0 = fmin(by0, wy + UI_NODE_Y(n));
+					bx1 = fmax(bx1, wx + UI_NODE_X(n) + UI_NODE_W(n));
+					by1 = fmax(by1, wy + UI_NODE_Y(n) + UI_NODE_H(canvas, n));
+				}
+			}
+		}
+		if (bx0 < left) ex = fmin((left - bx0) / margin, 1.0) * speed;
+		else if (bx1 > right) ex = -fmin((bx1 - right) / margin, 1.0) * speed;
+		if (by0 < top) ey = fmin((top - by0) / margin, 1.0) * speed;
+		else if (by1 > bottom) ey = -fmin((by1 - bottom) / margin, 1.0) * speed;
 		if (ex != 0.0 || ey != 0.0) {
 			float sc = UI_SCALE() * current_nodes->zoom;
 			current_nodes->pan_x += ex / sc;
