@@ -1597,6 +1597,11 @@ static void tab_layers_geometry_mask_next_frame(void *_) {
 	console_info(tr("Geometry mask: click faces to add them, Fill Mode in the header picks UV Islands or the whole Mesh"));
 }
 
+void tab_layers_new_geometry_mask(void) {
+	tab_layers_new_mask(0); // Black: hidden until faces are clicked
+	sys_notify_on_next_frame(&tab_layers_geometry_mask_next_frame, NULL);
+}
+
 void tab_layers_mask_slot_menu_draw(void) {
 	if (ui_menu_button(tr("Paint"), "", ICON_PAINT)) {
 		tab_layers_new_mask(5);
@@ -1605,8 +1610,7 @@ void tab_layers_mask_slot_menu_draw(void) {
 		tab_layers_new_mask(2);
 	}
 	if (ui_menu_button(tr("Geometry"), "", ICON_CUBE)) { // Polygons, UV islands or the whole mesh
-		tab_layers_new_mask(0); // Black: hidden until faces are clicked
-		sys_notify_on_next_frame(&tab_layers_geometry_mask_next_frame, NULL);
+		tab_layers_new_geometry_mask();
 	}
 
 	// Black and white fill driven by a texture of the project, scaled and projected like any fill
